@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package analytics;
+
+service QueryService {
+  rpc RunQuery (QueryRequest) returns (QueryResponse);
+}
+
+message QueryRequest {
+  string sql = 1;
+}
+
+message QueryResponse {
+  repeated Row rows = 1;
+}
+
+message Row {
+  repeated string values = 1;
+}
