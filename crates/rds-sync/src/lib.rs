@@ -7,13 +7,17 @@ use arrow::{
 };
 use sqlx::{types::chrono, PgPool, Row};
 use std::sync::Arc;
+
+/// # Errors
+///
+/// Will return `Err` if the table does not exist or if the schema cannot be inferred.
 pub async fn infer_arrow_schema(table: &str, pool: &PgPool) -> Result<Arc<Schema>> {
-    let query = r#"
+    let query = r"
         SELECT column_name, data_type, is_nullable
         FROM information_schema.columns
         WHERE table_name = $1
         ORDER BY ordinal_position
-    "#;
+    ";
 
     let rows = sqlx::query(query).bind(table).fetch_all(pool).await?;
 
@@ -42,10 +46,13 @@ pub async fn infer_arrow_schema(table: &str, pool: &PgPool) -> Result<Arc<Schema
     Ok(Arc::new(Schema::new(fields)))
 }
 
+/// # Errors
+///
+/// Will return `Err` if the table does not exist or if the schema cannot be inferred.
 pub async fn sync_table(table: &str, schema: &Schema, pool: &PgPool) -> Result<RecordBatch> {
     let column_names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
     let select_clause = column_names.join(", ");
-    let query = format!("SELECT {} FROM {}", select_clause, table);
+    let query = format!("SELECT {select_clause} FROM {table}");
 
     let rows = sqlx::query(&query).fetch_all(pool).await?;
     let mut columns: Vec<ArrayRef> = Vec::with_capacity(schema.fields().len());
@@ -92,7 +99,7 @@ pub async fn sync_table(table: &str, schema: &Schema, pool: &PgPool) -> Result<R
                     PrimitiveBuilder::<TimestampMicrosecondType>::with_capacity(rows.len());
                 for row in &rows {
                     let dt = row.try_get::<Option<chrono::NaiveDateTime>, _>(name)?;
-                    let ts = dt.map(|v| v.timestamp_micros());
+                    let ts = dt.map(|v| v.and_utc().timestamp_micros());
                     builder.append_option(ts);
                 }
                 Arc::new(builder.finish())
