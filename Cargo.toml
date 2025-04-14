@@ -5,6 +5,7 @@ members = [
     "crates/rds-sync",
     "crates/bin/server",
     "crates/bin/sync-cli",
+    "crates/bin/query-cli",
 ]
 resolver = "2"
 
