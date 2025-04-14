@@ -1,16 +1,26 @@
+use arrow::util::pretty::print_batches;
+use clap::*;
 use rds_sync::{infer_arrow_schema, sync_table};
 use sqlx::postgres::PgPoolOptions;
 use std::env;
 
+#[derive(Parser, Debug)]
+#[command(name = "sync-cli")]
+#[command(about = "Synchronize a table from Postgres and display it as a RecordBatch", long_about = None)]
+struct Args {
+    /// Name of the table to sync
+    #[arg(short, long)]
+    table: String,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let db_url = env::var("DATABASE_URL")?;
-    let table = "users";
-
     let pool = PgPoolOptions::new().connect(&db_url).await?;
+    let args = Args::parse();
 
-    let schema = infer_arrow_schema(table, &pool).await?;
-    let batch = sync_table(table, &schema, &pool).await?;
+    let schema = infer_arrow_schema(&args.table, &pool).await?;
+    let batch = sync_table(&args.table, &schema, &pool).await?;
 
     println!(
         "RecordBatch: {} rows, {} columns",
@@ -27,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
-    println!("{batch:?}");
+    print_batches(&[batch])?;
 
     Ok(())
 }

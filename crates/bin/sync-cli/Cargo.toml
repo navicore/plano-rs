@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 sqlx = { workspace = true, features = ["postgres", "runtime-tokio", "chrono"] }
+arrow = { workspace = true, features = ["prettyprint"] }
 tokio = { workspace = true }
 anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 rds-sync = { path = "../../rds-sync" }
