@@ -38,4 +38,18 @@ Export ENV VAR
 export DATABASE_URL=postgres://plano:plano@localhost:5432/plano_dev
 ```
 
+Use psql to load schema and data
+
+```
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT,
+  created_at TIMESTAMP DEFAULT now()
+);
+
+INSERT INTO users (name, email) VALUES
+('Alice', 'alice@example.com'),
+('Bob', 'bob@example.com');
+```
 
