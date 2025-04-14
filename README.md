@@ -11,8 +11,7 @@ A Rust-based analytics sync and query server using Apache Arrow and gRPC.
 setup / install via:
 
 ``
-brew install protobuf
-brew install postgres # just to get psql
+brew install protobuf duckdb postgres
 ``
 
 Run postgres
@@ -51,5 +50,12 @@ CREATE TABLE users (
 INSERT INTO users (name, email) VALUES
 ('Alice', 'alice@example.com'),
 ('Bob', 'bob@example.com');
+```
+
+
+query parqet files
+
+```
+duckdb -c "SELECT * FROM '/tmp/users.parquet' LIMIT 5"
 ```
 
