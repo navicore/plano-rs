@@ -1,31 +1,39 @@
+use anyhow::{bail, Result};
+use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
+use sqlx::{PgPool, Row};
 use std::sync::Arc;
 
-use anyhow::Result;
-use arrow::array::{ArrayRef, Int64Array, StringArray};
-use arrow::datatypes::{DataType, Field, Schema};
-use arrow::record_batch::RecordBatch;
-use sqlx::{PgPool, Row};
+pub async fn infer_arrow_schema(table: &str, pool: &PgPool) -> Result<Arc<Schema>> {
+    let query = r#"
+        SELECT column_name, data_type, is_nullable
+        FROM information_schema.columns
+        WHERE table_name = $1
+        ORDER BY ordinal_position
+    "#;
 
-pub async fn sync_table(table: &str, pool: &PgPool) -> Result<RecordBatch> {
-    let query = format!("SELECT id, name FROM {}", table); // adjust fields later
-    let rows = sqlx::query(&query).fetch_all(pool).await?;
+    let rows = sqlx::query(query).bind(table).fetch_all(pool).await?;
 
-    let mut ids = Vec::with_capacity(rows.len());
-    let mut names = Vec::with_capacity(rows.len());
+    let mut fields = Vec::with_capacity(rows.len());
 
     for row in rows {
-        ids.push(row.get::<i64, _>("id"));
-        names.push(row.get::<String, _>("name"));
+        let name: String = row.get("column_name");
+        let sql_type: String = row.get("data_type");
+        let nullable: bool = row.get::<String, _>("is_nullable") == "YES";
+
+        let arrow_type = match sql_type.as_str() {
+            "integer" | "int4" => DataType::Int32,
+            "bigint" | "int8" => DataType::Int64,
+            "smallint" | "int2" => DataType::Int16,
+            "text" | "character varying" | "varchar" => DataType::Utf8,
+            "boolean" => DataType::Boolean,
+            "timestamp without time zone" => DataType::Timestamp(TimeUnit::Microsecond, None),
+            "date" => DataType::Date32,
+            "numeric" | "decimal" => DataType::Float64, // lossy fallback
+            other => bail!("Unsupported SQL type: {}", other),
+        };
+
+        fields.push(Field::new(&name, arrow_type, nullable));
     }
 
-    let id_array: ArrayRef = Arc::new(Int64Array::from(ids));
-    let name_array: ArrayRef = Arc::new(StringArray::from(names));
-
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("id", DataType::Int64, false),
-        Field::new("name", DataType::Utf8, false),
-    ]));
-
-    let batch = RecordBatch::try_new(schema, vec![id_array, name_array])?;
-    Ok(batch)
+    Ok(Arc::new(Schema::new(fields)))
 }

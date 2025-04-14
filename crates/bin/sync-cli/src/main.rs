@@ -1,14 +1,15 @@
-use rds_sync::sync_table;
+use rds_sync::infer_arrow_schema;
 use sqlx::postgres::PgPoolOptions;
 use std::env;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let db_url = env::var("DATABASE_URL").expect("Please set DATABASE_URL in your environment");
+    let db_url = env::var("DATABASE_URL")?;
+    let table = "users";
 
     let pool = PgPoolOptions::new().connect(&db_url).await?;
-    let batch = sync_table("your_table_name", &pool).await?;
+    let schema = infer_arrow_schema(table, &pool).await?;
 
-    println!("Synced {} rows", batch.num_rows());
+    println!("Schema for {table}:\n{:#?}", schema);
     Ok(())
 }
