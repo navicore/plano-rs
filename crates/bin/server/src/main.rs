@@ -21,7 +21,7 @@ impl QueryService for MyQueryService {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse()?;
-    let service = MyQueryService::default();
+    let service = MyQueryService;
 
     tonic::transport::Server::builder()
         .add_service(QueryServiceServer::new(service))
