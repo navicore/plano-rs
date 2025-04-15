@@ -74,10 +74,10 @@ async fn handle_query(
     headers: warp::http::HeaderMap,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let Some(query) = form.get("sql") else {
-        return Ok(Response::builder()
+        return Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body("Missing 'sql'".into())
-            .unwrap());
+            .map_or_else(|_| Err(warp::reject()), Ok);
     };
 
     let path_map = paths.read().await;
