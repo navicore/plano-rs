@@ -1,9 +1,12 @@
 use clap::Parser;
+use datafusion::arrow::array::{Int64Array, RecordBatch, StringArray};
+use datafusion::arrow::datatypes::{DataType, Field, Schema};
 use datafusion::prelude::*;
 use glob::glob;
 use plano_core::format::{format_batches, OutputFormat};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
+use warp::http::HeaderMap;
 use warp::http::{Response, StatusCode};
 use warp::Filter;
 
@@ -23,6 +26,70 @@ fn parse_table(s: &str) -> Result<(String, String), String> {
         return Err("Expected format: name=glob".to_string());
     }
     Ok((parts[0].to_string(), parts[1].to_string()))
+}
+
+async fn handle_tables(
+    ctx: Arc<SessionContext>,
+    headers: HeaderMap,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let catalog = ctx
+        .catalog("datafusion")
+        .ok_or_else(warp::reject::not_found)?;
+
+    let schema = catalog
+        .schema("public")
+        .ok_or_else(warp::reject::not_found)?;
+
+    let mut table_names = Vec::new();
+    let mut row_counts = Vec::new();
+
+    for table_name in schema.table_names() {
+        let count_query = format!("SELECT COUNT(*) AS cnt FROM {table_name}");
+        let df = ctx.sql(&count_query).await.map_err(|_| warp::reject())?;
+        let batches = df.collect().await.map_err(|_| warp::reject())?;
+
+        let count_array = batches[0]
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or_else(warp::reject::not_found)?;
+
+        table_names.push(table_name.to_string());
+        row_counts.push(count_array.value(0));
+    }
+
+    // Create RecordBatch from collected data
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![
+            Field::new("table", DataType::Utf8, false),
+            Field::new("row_count", DataType::Int64, false),
+        ])),
+        vec![
+            Arc::new(StringArray::from(table_names)),
+            Arc::new(Int64Array::from(row_counts)),
+        ],
+    )
+    .map_err(|_| warp::reject())?;
+
+    let accept = headers
+        .get("accept")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/json");
+
+    let output_format = match accept {
+        "text/csv" => OutputFormat::Csv,
+        "text/plain" => OutputFormat::Text,
+        _ => OutputFormat::Json,
+    };
+
+    let content_type = match output_format {
+        OutputFormat::Csv => "text/csv",
+        OutputFormat::Text => "text/plain",
+        OutputFormat::Json => "application/json",
+    };
+    let body = format_batches(&[batch], output_format).map_err(|_| warp::reject())?;
+
+    Ok(warp::reply::with_header(body, "Content-Type", content_type))
 }
 
 #[tokio::main]
@@ -50,20 +117,41 @@ async fn main() -> anyhow::Result<()> {
 
     let shared_paths = Arc::new(RwLock::new(table_paths));
 
+    // Explicitly load tables at startup
+    {
+        let table_paths = shared_paths.read().await;
+        for (name, files) in table_paths.iter() {
+            if ctx.table(name).await.is_err() {
+                let df = ctx
+                    .read_parquet(files.clone(), ParquetReadOptions::default())
+                    .await?;
+                ctx.register_table(name, df.into_view())?;
+            }
+        }
+    }
+
     let ctx_filter = warp::any().map(move || ctx.clone());
     let paths_filter = warp::any().map(move || shared_paths.clone());
 
     let query_route = warp::path("query")
         .and(warp::post())
         .and(warp::body::form())
-        .and(ctx_filter)
-        .and(paths_filter)
-        .and(warp::header::headers_cloned()) // <- add this
+        .and(ctx_filter.clone())
+        .and(paths_filter.clone())
+        .and(warp::header::headers_cloned())
         .and_then(handle_query);
+
+    let tables_route = warp::path("tables")
+        .and(warp::get())
+        .and(ctx_filter.clone())
+        .and(warp::header::headers_cloned())
+        .and_then(handle_tables);
+
+    let routes = query_route.or(tables_route);
 
     println!("Serving on http://{}", args.bind);
     let addr: std::net::SocketAddr = args.bind.parse()?;
-    warp::serve(query_route).run(addr).await;
+    warp::serve(routes).run(addr).await;
 
     Ok(())
 }
