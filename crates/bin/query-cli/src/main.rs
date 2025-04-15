@@ -1,27 +1,31 @@
 use clap::Parser;
-use datafusion::arrow::util::pretty::print_batches;
 use datafusion::prelude::*;
 use glob::glob;
-use rustyline::config::EditMode;
+use plano_core::format::{format_batches, OutputFormat};
+use rustyline::error::ReadlineError;
 use rustyline::history::FileHistory;
-use rustyline::{error::ReadlineError, Config, Editor};
+use rustyline::Config;
+use rustyline::Editor as LineEditor;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
-/// Run SQL queries against one or more Parquet files using `DataFusion`
 #[derive(Parser, Debug)]
 #[command(name = "query-cli")]
 struct Args {
+    /// Start in interactive REPL mode
+    #[arg(long)]
+    repl: bool,
     /// One or more --table `name=glob_pattern` entries
     #[arg(short, long, required = true, value_parser = parse_table)]
     table: Vec<(String, String)>,
 
-    /// SQL query to run
-    #[arg(short, long)]
+    /// Optional SQL query to run directly
+    #[arg(long)]
     query: Option<String>,
 
-    /// Start an interactive REPL
-    #[arg(long)]
-    repl: bool,
+    /// Optional output format: text, csv, or json
+    #[arg(long, default_value = "text")]
+    format: String,
 }
 
 fn parse_table(s: &str) -> Result<(String, String), String> {
@@ -33,117 +37,103 @@ fn parse_table(s: &str) -> Result<(String, String), String> {
 }
 
 #[tokio::main]
-async fn main() -> datafusion::error::Result<()> {
+async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let ctx = SessionContext::new();
+    let mut table_paths: HashMap<String, Vec<String>> = HashMap::new();
 
-    for (table_name, pattern) in &args.table {
+    for (name, pattern) in &args.table {
         #[allow(clippy::expect_used)]
-        let file_paths: Vec<_> = glob(pattern)
+        let files: Vec<_> = glob(pattern)
             .expect("Invalid glob pattern")
             .filter_map(Result::ok)
-            .filter(|path| path.extension().is_some_and(|ext| ext == "parquet"))
+            .filter(|p| p.extension().is_some_and(|e| e == "parquet"))
             .map(|p| p.to_string_lossy().to_string())
             .collect();
 
-        if file_paths.is_empty() {
-            eprintln!("No parquet files matched pattern for table '{table_name}': {pattern}");
-            std::process::exit(1);
+        if files.is_empty() {
+            eprintln!("No files matched for table '{name}': {pattern}");
+            continue;
         }
 
-        let df = ctx
-            .read_parquet(file_paths.clone(), ParquetReadOptions::default())
-            .await?;
-        ctx.register_table(table_name, df.into_view())?;
+        table_paths.insert(name.clone(), files);
     }
 
-    if args.repl {
-        let config = Config::builder().edit_mode(EditMode::Vi).build();
-        let mut rl = Editor::<(), FileHistory>::with_history(config, FileHistory::new())
-            .map_err(|e| datafusion::error::DataFusionError::Execution(e.to_string()))?;
+    for (name, files) in &table_paths {
+        let df = ctx
+            .read_parquet(files.clone(), ParquetReadOptions::default())
+            .await?;
+        ctx.register_table(name, df.into_view())?;
+    }
 
-        //let history_path = PathBuf::from("query-cli-history.txt");
-        // let history_path = dirs::data_dir()
-        //     .unwrap_or_else(|| PathBuf::from("."))
-        //     .join("query-cli-history.txt");
-        // if let Some(parent) = history_path.parent() {
-        //     std::fs::create_dir_all(parent).ok();
-        // }
-        let history_path = dirs::data_local_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("query-cli")
-            .join("query-cli-history.txt");
+    let format = match args.format.as_str() {
+        "json" => OutputFormat::Json,
+        "csv" => OutputFormat::Csv,
+        _ => OutputFormat::Text,
+    };
 
-        if let Some(parent) = history_path.parent() {
-            std::fs::create_dir_all(parent).ok();
-        }
+    if let Some(sql) = args.query {
+        let df = ctx.sql(&sql).await?;
+        let batches = df.collect().await?;
+        let output = format_batches(&batches, format).map_err(|e| anyhow::anyhow!(e))?;
+        println!("{output}");
+        return Ok(());
+    }
 
-        let _ = rl.load_history(&history_path);
-        rl.set_helper(None);
+    if !args.repl {
+        eprintln!("No query provided and --repl not set. Exiting.");
+        return Ok(());
+    }
 
-        loop {
-            match rl.readline("sql> ") {
-                Ok(input) => {
-                    let input = input.trim();
-                    if input == ".exit" {
-                        let _ = rl.save_history(&history_path);
-                        break;
-                    } else if input == ".tables" {
-                        if let Some(schema) =
-                            ctx.catalog("datafusion").and_then(|c| c.schema("public"))
-                        {
-                            for table in schema.table_names() {
-                                println!("{table}");
-                            }
-                        } else {
-                            eprintln!("[.tables] failed to access default schema.");
-                        }
+    // REPL mode
+    let config = Config::builder().auto_add_history(true).build();
+    let history_path = dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("query-cli-history.txt");
 
-                        continue;
-                    }
-                    if !input.is_empty() {
-                        if let Some(parent) = history_path.parent() {
-                            std::fs::create_dir_all(parent).ok();
-                        }
+    let mut rl = LineEditor::<(), FileHistory>::with_history(config, FileHistory::new())?;
+    rl.load_history(&history_path).ok();
 
-                        if rl
-                            .history()
-                            .into_iter()
-                            .last()
-                            .is_none_or(|last| last != input)
-                            && rl.add_history_entry(input).is_ok()
-                        {
-                            let _ = rl.save_history(&history_path);
-                        }
-
-                        match ctx.sql(input).await {
-                            Ok(df) => match df.collect().await {
-                                Ok(results) => {
-                                    if let Err(e) = print_batches(&results) {
-                                        eprintln!("Error printing results: {e}");
-                                    }
-                                }
-                                Err(e) => eprintln!("Execution error: {e}"),
-                            },
-                            Err(e) => eprintln!("Query error: {e}"),
-                        }
-                    }
-                }
-                Err(ReadlineError::Interrupted | ReadlineError::Eof) => break,
-                Err(err) => {
-                    eprintln!("Readline error: {err:?}");
+    loop {
+        let line = rl.readline("query> ");
+        match line {
+            Ok(line) => {
+                let sql = line.trim();
+                if sql.eq_ignore_ascii_case(".exit") {
                     break;
                 }
+                if sql.eq_ignore_ascii_case(".tables") {
+                    if let Some(schema) = ctx.catalog("datafusion").and_then(|c| c.schema("public"))
+                    {
+                        for t in schema.table_names() {
+                            println!("{t}");
+                        }
+                    }
+                    continue;
+                }
+                match ctx.sql(sql).await {
+                    Ok(df) => match df.collect().await {
+                        Ok(batches) => {
+                            match format_batches(&batches, format.clone())
+                                .map_err(|e| anyhow::anyhow!(e))
+                            {
+                                Ok(output) => println!("{output}"),
+                                Err(e) => eprintln!("format error: {e}"),
+                            }
+                        }
+                        Err(e) => eprintln!("query error: {e}"),
+                    },
+                    Err(e) => eprintln!("sql error: {e}"),
+                }
+            }
+            Err(ReadlineError::Interrupted | ReadlineError::Eof) => break,
+            Err(err) => {
+                eprintln!("Error: {err}");
+                break;
             }
         }
-    } else if let Some(query) = args.query {
-        let df = ctx.sql(&query).await?;
-
-        let results = df.collect().await?;
-        print_batches(&results)?;
-    } else {
-        eprintln!("Either --query or --repl must be provided.");
     }
 
+    rl.save_history(&history_path).ok();
     Ok(())
 }
