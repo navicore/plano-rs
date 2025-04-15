@@ -1,0 +1,18 @@
+[package]
+name = "query-cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rds-sync = { path = "../../rds-sync" }
+anyhow = { workspace = true }
+arrow = { workspace = true, features = ["prettyprint"] }
+clap = { workspace = true, features = ["derive"] }
+parquet = { workspace = true, features = ["arrow"] }
+sqlx = { workspace = true, features = ["postgres", "runtime-tokio", "chrono"] }
+tokio = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing = { workspace = true }
+datafusion = { workspace = true }
+glob = { workspace = true }
+
