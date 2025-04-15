@@ -11,6 +11,8 @@ pub enum OutputFormat {
     Text,
 }
 
+/// Formats the given record batches into a string representation based on the specified output format.
+/// ## Errors
 pub fn format_batches(batches: &[RecordBatch], format: OutputFormat) -> Result<String, String> {
     match format {
         OutputFormat::Json => {

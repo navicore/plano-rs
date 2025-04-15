@@ -32,15 +32,16 @@ async fn main() -> anyhow::Result<()> {
     let mut table_paths: HashMap<String, Vec<String>> = HashMap::new();
 
     for (name, pattern) in &args.table {
+        #[allow(clippy::expect_used)]
         let files: Vec<_> = glob(pattern)
             .expect("Invalid glob pattern")
             .filter_map(Result::ok)
-            .filter(|p| p.extension().map(|e| e == "parquet").unwrap_or(false))
+            .filter(|p| p.extension().is_some_and(|e| e == "parquet"))
             .map(|p| p.to_string_lossy().to_string())
             .collect();
 
         if files.is_empty() {
-            eprintln!("No files matched for table '{}': {}", name, pattern);
+            eprintln!("No files matched for table '{name}': {pattern}");
             continue;
         }
 
@@ -80,8 +81,7 @@ async fn handle_query(
             .map_or_else(|_| Err(warp::reject()), Ok);
     };
 
-    let path_map = paths.read().await;
-    for (name, files) in path_map.iter() {
+    for (name, files) in paths.read().await.iter() {
         if ctx.table(name).await.is_err() {
             let df = ctx
                 .read_parquet(files.clone(), ParquetReadOptions::default())

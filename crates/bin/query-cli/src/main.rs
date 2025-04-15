@@ -15,7 +15,7 @@ struct Args {
     /// Start in interactive REPL mode
     #[arg(long)]
     repl: bool,
-    /// One or more --table name=glob_pattern entries
+    /// One or more --table `name=glob_pattern` entries
     #[arg(short, long, required = true, value_parser = parse_table)]
     table: Vec<(String, String)>,
 
@@ -43,22 +43,23 @@ async fn main() -> anyhow::Result<()> {
     let mut table_paths: HashMap<String, Vec<String>> = HashMap::new();
 
     for (name, pattern) in &args.table {
+        #[allow(clippy::expect_used)]
         let files: Vec<_> = glob(pattern)
             .expect("Invalid glob pattern")
             .filter_map(Result::ok)
-            .filter(|p| p.extension().map(|e| e == "parquet").unwrap_or(false))
+            .filter(|p| p.extension().is_some_and(|e| e == "parquet"))
             .map(|p| p.to_string_lossy().to_string())
             .collect();
 
         if files.is_empty() {
-            eprintln!("No files matched for table '{}': {}", name, pattern);
+            eprintln!("No files matched for table '{name}': {pattern}");
             continue;
         }
 
         table_paths.insert(name.clone(), files);
     }
 
-    for (name, files) in table_paths.iter() {
+    for (name, files) in &table_paths {
         let df = ctx
             .read_parquet(files.clone(), ParquetReadOptions::default())
             .await?;
@@ -75,7 +76,7 @@ async fn main() -> anyhow::Result<()> {
         let df = ctx.sql(&sql).await?;
         let batches = df.collect().await?;
         let output = format_batches(&batches, format).map_err(|e| anyhow::anyhow!(e))?;
-        println!("{}", output);
+        println!("{output}");
         return Ok(());
     }
 
@@ -105,7 +106,7 @@ async fn main() -> anyhow::Result<()> {
                     if let Some(schema) = ctx.catalog("datafusion").and_then(|c| c.schema("public"))
                     {
                         for t in schema.table_names() {
-                            println!("{}", t);
+                            println!("{t}");
                         }
                     }
                     continue;
@@ -116,7 +117,7 @@ async fn main() -> anyhow::Result<()> {
                             match format_batches(&batches, format.clone())
                                 .map_err(|e| anyhow::anyhow!(e))
                             {
-                                Ok(output) => println!("{}", output),
+                                Ok(output) => println!("{output}"),
                                 Err(e) => eprintln!("format error: {e}"),
                             }
                         }
