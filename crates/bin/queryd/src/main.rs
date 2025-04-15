@@ -44,7 +44,7 @@ async fn handle_tables(
     let mut row_counts = Vec::new();
 
     for table_name in schema.table_names() {
-        let count_query = format!("SELECT COUNT(*) AS cnt FROM {}", table_name);
+        let count_query = format!("SELECT COUNT(*) AS cnt FROM {table_name}");
         let df = ctx.sql(&count_query).await.map_err(|_| warp::reject())?;
         let batches = df.collect().await.map_err(|_| warp::reject())?;
 
@@ -99,15 +99,16 @@ async fn main() -> anyhow::Result<()> {
     let mut table_paths: HashMap<String, Vec<String>> = HashMap::new();
 
     for (name, pattern) in &args.table {
+        #[allow(clippy::expect_used)]
         let files: Vec<_> = glob(pattern)
             .expect("Invalid glob pattern")
             .filter_map(Result::ok)
-            .filter(|p| p.extension().map(|e| e == "parquet").unwrap_or(false))
+            .filter(|p| p.extension().is_some_and(|e| e == "parquet"))
             .map(|p| p.to_string_lossy().to_string())
             .collect();
 
         if files.is_empty() {
-            eprintln!("No files matched for table '{}': {}", name, pattern);
+            eprintln!("No files matched for table '{name}': {pattern}");
             continue;
         }
 
