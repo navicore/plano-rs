@@ -2,6 +2,9 @@ use clap::Parser;
 use datafusion::arrow::util::pretty::print_batches;
 use datafusion::prelude::*;
 use glob::glob;
+use rustyline::config::EditMode;
+use rustyline::history::MemHistory;
+use rustyline::{error::ReadlineError, Config, Editor};
 
 /// Run SQL queries against one or more Parquet files using DataFusion
 #[derive(Parser, Debug)]
@@ -13,7 +16,11 @@ struct Args {
 
     /// SQL query to run
     #[arg(short, long)]
-    query: String,
+    query: Option<String>,
+
+    /// Start an interactive REPL
+    #[arg(long)]
+    repl: bool,
 }
 
 fn parse_table(s: &str) -> Result<(String, String), String> {
@@ -55,10 +62,48 @@ async fn main() -> datafusion::error::Result<()> {
         ctx.register_table(table_name, df.into_view())?;
     }
 
-    // Execute the query
-    let df = ctx.sql(&args.query).await?;
-    let results = df.collect().await?;
-    print_batches(&results)?;
+    if args.repl {
+        let config = Config::builder().edit_mode(EditMode::Vi).build();
+        let mut rl = Editor::<(), MemHistory>::with_history(config, MemHistory::new())
+            .expect("Failed to initialize rustyline with history");
+        rl.set_helper(None);
+
+        loop {
+            match rl.readline("query> ") {
+                Ok(input) => {
+                    let input = input.trim();
+                    if input == ".exit" {
+                        break;
+                    }
+                    if !input.is_empty() {
+                        let _ = rl.add_history_entry(input);
+                        match ctx.sql(input).await {
+                            Ok(df) => match df.collect().await {
+                                Ok(results) => {
+                                    if let Err(e) = print_batches(&results) {
+                                        eprintln!("Error printing results: {e}");
+                                    }
+                                }
+                                Err(e) => eprintln!("Execution error: {e}"),
+                            },
+                            Err(e) => eprintln!("Query error: {e}"),
+                        }
+                    }
+                }
+                Err(ReadlineError::Interrupted | ReadlineError::Eof) => break,
+                Err(err) => {
+                    eprintln!("Readline error: {:?}", err);
+                    break;
+                }
+            }
+        }
+    } else if let Some(query) = args.query {
+        let df = ctx.sql(&query).await?;
+        let results = df.collect().await?;
+        print_batches(&results)?;
+    } else {
+        eprintln!("Either --query or --repl must be provided.");
+    }
 
     Ok(())
 }

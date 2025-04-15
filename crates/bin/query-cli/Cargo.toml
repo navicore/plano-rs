@@ -15,4 +15,5 @@ tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
 datafusion = { workspace = true }
 glob = { workspace = true }
+rustyline = { workspace = true }
 
