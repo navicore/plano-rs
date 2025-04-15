@@ -1,6 +1,7 @@
 use clap::Parser;
-use datafusion::{arrow, prelude::*};
+use datafusion::prelude::*;
 use glob::glob;
+use plano_core::format::{format_batches, OutputFormat};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use warp::http::{Response, StatusCode};
@@ -99,56 +100,25 @@ async fn handle_query(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("text/plain");
 
-    let response = if accept == "application/json" {
-        use datafusion::arrow::json::writer::LineDelimitedWriter;
-        use std::io::Cursor;
-
-        let mut buffer = Cursor::new(Vec::new());
-        {
-            let mut writer = LineDelimitedWriter::new(&mut buffer);
-            for batch in &results {
-                writer.write(batch).map_err(|_| warp::reject())?;
-            }
-            writer.finish().map_err(|_| warp::reject())?;
-        }
-
-        let json_string = String::from_utf8(buffer.into_inner()).map_err(|_| warp::reject())?;
-
-        Response::builder()
-            .status(StatusCode::OK)
-            .header("Content-Type", "application/json")
-            .body(json_string)
-            .unwrap()
-    } else if accept == "text/csv" {
-        use datafusion::arrow::csv::writer::WriterBuilder;
-        use std::io::Cursor;
-
-        let mut buffer = Cursor::new(Vec::new());
-        {
-            let mut writer = WriterBuilder::new().build(&mut buffer);
-
-            for batch in &results {
-                writer.write(batch).map_err(|_| warp::reject())?;
-            }
-        }
-
-        let csv_string = String::from_utf8(buffer.into_inner()).map_err(|_| warp::reject())?;
-
-        Response::builder()
-            .status(StatusCode::OK)
-            .header("Content-Type", "text/csv")
-            .body(csv_string)
-            .unwrap()
-    } else {
-        let formatted = arrow::util::pretty::pretty_format_batches(&results)
-            .map_err(|_| warp::reject())?
-            .to_string();
-        Response::builder()
-            .status(StatusCode::OK)
-            .header("Content-Type", "text/plain")
-            .body(formatted)
-            .unwrap()
+    let format = match accept {
+        "application/json" => OutputFormat::Json,
+        "text/csv" => OutputFormat::Csv,
+        _ => OutputFormat::Text,
     };
+
+    let content_type = match &format {
+        OutputFormat::Json => "application/json",
+        OutputFormat::Csv => "text/csv",
+        OutputFormat::Text => "text/plain",
+    };
+
+    let body = format_batches(&results, format).map_err(|_| warp::reject())?;
+
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", content_type)
+        .body(body)
+        .unwrap();
 
     Ok(response)
 }
