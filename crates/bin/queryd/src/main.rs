@@ -119,6 +119,26 @@ async fn handle_query(
             .header("Content-Type", "application/json")
             .body(json_string)
             .unwrap()
+    } else if accept == "text/csv" {
+        use datafusion::arrow::csv::writer::WriterBuilder;
+        use std::io::Cursor;
+
+        let mut buffer = Cursor::new(Vec::new());
+        {
+            let mut writer = WriterBuilder::new().build(&mut buffer);
+
+            for batch in &results {
+                writer.write(batch).map_err(|_| warp::reject())?;
+            }
+        }
+
+        let csv_string = String::from_utf8(buffer.into_inner()).map_err(|_| warp::reject())?;
+
+        Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "text/csv")
+            .body(csv_string)
+            .unwrap()
     } else {
         let formatted = arrow::util::pretty::pretty_format_batches(&results)
             .map_err(|_| warp::reject())?
