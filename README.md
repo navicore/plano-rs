@@ -53,7 +53,26 @@ INSERT INTO users (name, email) VALUES
 ```
 
 
-query parqet files
+```
+CREATE TABLE employees (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT,
+  created_at TIMESTAMP DEFAULT now()
+);
+
+INSERT INTO employees (name, email) VALUES
+('Mary', 'mary@big.com'),
+('Joe', 'joe@big.com');
+```
+
+
+```
+cargo run -p sync-cli -- --table users
+cargo run -p sync-cli -- --table employees
+```
+
+Query parquet files
 
 ```
 duckdb -c "SELECT * FROM '/tmp/users.parquet' LIMIT 5"
