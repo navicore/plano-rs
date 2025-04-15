@@ -7,11 +7,11 @@ use rustyline::history::FileHistory;
 use rustyline::{error::ReadlineError, Config, Editor};
 use std::path::PathBuf;
 
-/// Run SQL queries against one or more Parquet files using DataFusion
+/// Run SQL queries against one or more Parquet files using `DataFusion`
 #[derive(Parser, Debug)]
 #[command(name = "query-cli")]
 struct Args {
-    /// One or more --table name=glob_pattern entries
+    /// One or more --table `name=glob_pattern` entries
     #[arg(short, long, required = true, value_parser = parse_table)]
     table: Vec<(String, String)>,
 
@@ -38,22 +38,16 @@ async fn main() -> datafusion::error::Result<()> {
     let ctx = SessionContext::new();
 
     for (table_name, pattern) in &args.table {
+        #[allow(clippy::expect_used)]
         let file_paths: Vec<_> = glob(pattern)
             .expect("Invalid glob pattern")
             .filter_map(Result::ok)
-            .filter(|path| {
-                path.extension()
-                    .map(|ext| ext == "parquet")
-                    .unwrap_or(false)
-            })
+            .filter(|path| path.extension().is_some_and(|ext| ext == "parquet"))
             .map(|p| p.to_string_lossy().to_string())
             .collect();
 
         if file_paths.is_empty() {
-            eprintln!(
-                "No parquet files matched pattern for table '{}': {}",
-                table_name, pattern
-            );
+            eprintln!("No parquet files matched pattern for table '{table_name}': {pattern}");
             std::process::exit(1);
         }
 
@@ -99,7 +93,7 @@ async fn main() -> datafusion::error::Result<()> {
                             ctx.catalog("datafusion").and_then(|c| c.schema("public"))
                         {
                             for table in schema.table_names() {
-                                println!("{}", table);
+                                println!("{table}");
                             }
                         } else {
                             eprintln!("[.tables] failed to access default schema.");
@@ -137,13 +131,14 @@ async fn main() -> datafusion::error::Result<()> {
                 }
                 Err(ReadlineError::Interrupted | ReadlineError::Eof) => break,
                 Err(err) => {
-                    eprintln!("Readline error: {:?}", err);
+                    eprintln!("Readline error: {err:?}");
                     break;
                 }
             }
         }
     } else if let Some(query) = args.query {
         let df = ctx.sql(&query).await?;
+
         let results = df.collect().await?;
         print_batches(&results)?;
     } else {
