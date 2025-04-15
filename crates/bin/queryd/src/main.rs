@@ -113,12 +113,9 @@ async fn handle_query(
     };
 
     let body = format_batches(&results, format).map_err(|_| warp::reject())?;
-
-    let response = Response::builder()
+    Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", content_type)
         .body(body)
-        .unwrap();
-
-    Ok(response)
+        .map_or_else(|_| Err(warp::reject()), Ok)
 }
