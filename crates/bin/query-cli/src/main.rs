@@ -74,6 +74,18 @@ async fn main() -> datafusion::error::Result<()> {
                     let input = input.trim();
                     if input == ".exit" {
                         break;
+                    } else if input == ".tables" {
+                        if let Some(schema) =
+                            ctx.catalog("datafusion").and_then(|c| c.schema("public"))
+                        {
+                            for table in schema.table_names() {
+                                println!("{}", table);
+                            }
+                        } else {
+                            eprintln!("[.tables] failed to access default schema.");
+                        }
+
+                        continue;
                     }
                     if !input.is_empty() {
                         let _ = rl.add_history_entry(input);
