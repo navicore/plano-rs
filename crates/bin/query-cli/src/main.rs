@@ -3,8 +3,9 @@ use datafusion::arrow::util::pretty::print_batches;
 use datafusion::prelude::*;
 use glob::glob;
 use rustyline::config::EditMode;
-use rustyline::history::MemHistory;
+use rustyline::history::FileHistory;
 use rustyline::{error::ReadlineError, Config, Editor};
+use std::path::PathBuf;
 
 /// Run SQL queries against one or more Parquet files using DataFusion
 #[derive(Parser, Debug)]
@@ -64,15 +65,34 @@ async fn main() -> datafusion::error::Result<()> {
 
     if args.repl {
         let config = Config::builder().edit_mode(EditMode::Vi).build();
-        let mut rl = Editor::<(), MemHistory>::with_history(config, MemHistory::new())
-            .expect("Failed to initialize rustyline with history");
+        let mut rl = Editor::<(), FileHistory>::with_history(config, FileHistory::new())
+            .map_err(|e| datafusion::error::DataFusionError::Execution(e.to_string()))?;
+
+        //let history_path = PathBuf::from("query-cli-history.txt");
+        // let history_path = dirs::data_dir()
+        //     .unwrap_or_else(|| PathBuf::from("."))
+        //     .join("query-cli-history.txt");
+        // if let Some(parent) = history_path.parent() {
+        //     std::fs::create_dir_all(parent).ok();
+        // }
+        let history_path = dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("query-cli")
+            .join("query-cli-history.txt");
+
+        if let Some(parent) = history_path.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+
+        let _ = rl.load_history(&history_path);
         rl.set_helper(None);
 
         loop {
-            match rl.readline("query> ") {
+            match rl.readline("sql> ") {
                 Ok(input) => {
                     let input = input.trim();
                     if input == ".exit" {
+                        let _ = rl.save_history(&history_path);
                         break;
                     } else if input == ".tables" {
                         if let Some(schema) =
@@ -88,7 +108,20 @@ async fn main() -> datafusion::error::Result<()> {
                         continue;
                     }
                     if !input.is_empty() {
-                        let _ = rl.add_history_entry(input);
+                        if let Some(parent) = history_path.parent() {
+                            std::fs::create_dir_all(parent).ok();
+                        }
+
+                        if rl
+                            .history()
+                            .into_iter()
+                            .last()
+                            .is_none_or(|last| last != input)
+                            && rl.add_history_entry(input).is_ok()
+                        {
+                            let _ = rl.save_history(&history_path);
+                        }
+
                         match ctx.sql(input).await {
                             Ok(df) => match df.collect().await {
                                 Ok(results) => {
