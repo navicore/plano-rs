@@ -16,6 +16,9 @@ struct Args {
     /// Name of the table to sync
     #[arg(short, long)]
     table: String,
+
+    #[arg(short, long, help = "Print the RecordBatch to stdout")]
+    print: bool,
 }
 
 #[tokio::main]
@@ -36,7 +39,9 @@ async fn main() -> anyhow::Result<()> {
     writer.write(&batch)?;
     writer.close()?;
 
-    print_batches(&[batch])?;
+    if args.print {
+        print_batches(&[batch])?;
+    }
     info!("Wrote Parquet file to {output_path}");
     Ok(())
 }

@@ -2,7 +2,8 @@ use anyhow::{bail, Result};
 use arrow::{
     array::{ArrayRef, BooleanBuilder, PrimitiveBuilder, RecordBatch, StringBuilder},
     datatypes::{
-        DataType, Field, Int32Type, Int64Type, Schema, TimeUnit, TimestampMicrosecondType,
+        DataType, Field, Float64Type, Int32Type, Int64Type, Schema, TimeUnit,
+        TimestampMicrosecondType,
     },
 };
 use sqlx::{types::chrono, PgPool, Row};
@@ -36,7 +37,7 @@ pub async fn infer_arrow_schema(table: &str, pool: &PgPool) -> Result<Arc<Schema
             "boolean" => DataType::Boolean,
             "timestamp without time zone" => DataType::Timestamp(TimeUnit::Microsecond, None),
             "date" => DataType::Date32,
-            "numeric" | "decimal" => DataType::Float64, // lossy fallback
+            "numeric" | "decimal" | "double precision" => DataType::Float64, // lossy fallback
             other => bail!("Unsupported SQL type: {}", other),
         };
 
@@ -62,6 +63,14 @@ pub async fn sync_table(table: &str, schema: &Schema, pool: &PgPool) -> Result<R
         let data_type = field.data_type();
 
         let array: ArrayRef = match data_type {
+            DataType::Float64 => {
+                let mut builder = PrimitiveBuilder::<Float64Type>::with_capacity(rows.len());
+                for row in &rows {
+                    let value = row.try_get::<Option<f64>, _>(name)?;
+                    builder.append_option(value);
+                }
+                Arc::new(builder.finish())
+            }
             DataType::Int64 => {
                 let mut builder = PrimitiveBuilder::<Int64Type>::with_capacity(rows.len());
                 for row in &rows {
