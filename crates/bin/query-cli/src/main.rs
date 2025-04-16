@@ -2,6 +2,7 @@ use clap::Parser;
 use datafusion::prelude::*;
 use glob::glob;
 use plano_core::format::{format_batches, OutputFormat};
+use rustyline::config::Configurer;
 use rustyline::error::ReadlineError;
 use rustyline::history::FileHistory;
 use rustyline::Config;
@@ -92,6 +93,7 @@ async fn main() -> anyhow::Result<()> {
         .join("query-cli-history.txt");
 
     let mut rl = LineEditor::<(), FileHistory>::with_history(config, FileHistory::new())?;
+    rl.set_edit_mode(rustyline::config::EditMode::Vi);
     rl.load_history(&history_path).ok();
 
     loop {
