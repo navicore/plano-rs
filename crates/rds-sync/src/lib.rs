@@ -1,3 +1,4 @@
+/// RDS Sync Library
 use anyhow::{bail, Result};
 use arrow::{
     array::{ArrayRef, BooleanBuilder, PrimitiveBuilder, RecordBatch, StringBuilder},
@@ -47,6 +48,7 @@ pub async fn infer_arrow_schema(table: &str, pool: &PgPool) -> Result<Arc<Schema
     Ok(Arc::new(Schema::new(fields)))
 }
 
+/// Synchronizes a table from Postgres into an Arrow `RecordBatch`
 /// # Errors
 ///
 /// Will return `Err` if the table does not exist or if the schema cannot be inferred.

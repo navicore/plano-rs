@@ -1,3 +1,4 @@
+/// Query CLI for `DataFusion`
 use clap::Parser;
 use datafusion::prelude::*;
 use glob::glob;
@@ -11,6 +12,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use tracing::error;
 
+/// Command-line arguments for the query CLI
 #[derive(Parser, Debug)]
 #[command(name = "query-cli")]
 struct Args {
@@ -30,6 +32,7 @@ struct Args {
     format: String,
 }
 
+/// Parses a table definition in the format "name=glob"
 fn parse_table(s: &str) -> Result<(String, String), String> {
     let parts: Vec<_> = s.splitn(2, '=').collect();
     if parts.len() != 2 {

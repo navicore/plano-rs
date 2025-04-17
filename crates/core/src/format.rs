@@ -1,9 +1,11 @@
+/// Format module for handling output of record batches in different formats.
 use datafusion::arrow::{
     array::RecordBatch, csv::writer::WriterBuilder, json::writer::LineDelimitedWriter,
     util::pretty::pretty_format_batches,
 };
 use std::io::Cursor;
 
+/// Enum representing the output format for record batches.
 #[derive(Debug, Clone)]
 pub enum OutputFormat {
     Json,

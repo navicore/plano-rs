@@ -1,3 +1,4 @@
+/// A simple DataFusion-based query server that serves SQL queries and table metadata
 use clap::Parser;
 use datafusion::arrow::array::{Int64Array, RecordBatch, StringArray};
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
@@ -11,13 +12,15 @@ use warp::http::HeaderMap;
 use warp::http::{Response, StatusCode};
 use warp::Filter;
 
-/// A simple DataFusion-based query server that serves SQL queries and table metadata
+/// Command-line arguments for the query server
 #[derive(Parser, Debug)]
 #[command(name = "queryd")]
 struct Args {
+    /// List of tables to register, in the format "name=glob"
     #[arg(short, long, required = true, value_parser = parse_table)]
     table: Vec<(String, String)>,
 
+    /// Address to bind the server to
     #[arg(long, default_value = "127.0.0.1:8080")]
     bind: String,
 }
@@ -164,6 +167,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Handles the `/query` endpoint to execute SQL queries
 async fn handle_query(
     form: HashMap<String, String>,
     ctx: Arc<SessionContext>,

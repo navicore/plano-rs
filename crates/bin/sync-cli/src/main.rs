@@ -1,3 +1,4 @@
+/// Synchronize a Postgres table and write to Parquet with optional partitioning
 use arrow::util::pretty::print_batches;
 use clap::{ArgAction, Parser};
 use parquet::arrow::ArrowWriter;
@@ -18,6 +19,7 @@ use arrow::record_batch::RecordBatch;
 use chrono::prelude::*;
 use std::collections::HashMap;
 
+/// Command-line arguments for the sync CLI
 #[derive(Parser, Debug)]
 #[command(name = "sync-cli")]
 #[command(about = "Synchronize a table from Postgres and write Parquet with optional partitioning", long_about = None)]
