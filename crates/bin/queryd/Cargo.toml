@@ -8,7 +8,6 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 datafusion = { workspace = true }
 glob = { workspace = true }
-plano-api = { path = "../../api" }
 plano-core = { path = "../../core" }
 serde = { workspace = true }
 serde_json = { workspace = true }
