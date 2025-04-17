@@ -23,6 +23,9 @@ podman run --name plano-postgres \
   -e POSTGRES_DB=plano_dev \
   -p 5432:5432 \
   -d docker.io/library/postgres:15
+
+#later...
+restart $(docker ps -aq -f status=exited)
 ```
 
 Connect
