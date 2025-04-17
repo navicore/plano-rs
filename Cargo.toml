@@ -3,9 +3,9 @@ members = [
     "crates/api",
     "crates/core",
     "crates/rds-sync",
-    "crates/bin/queryd",
-    "crates/bin/sync-cli",
-    "crates/bin/query-cli",
+    "crates/bin/plano-serv",
+    "crates/bin/plano-sync",
+    "crates/bin/plano-repl",
 ]
 resolver = "2"
 

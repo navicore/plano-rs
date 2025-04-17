@@ -14,7 +14,7 @@ use warp::Filter;
 
 /// Command-line arguments for the query server
 #[derive(Parser, Debug)]
-#[command(name = "queryd")]
+#[command(name = "plano-serv")]
 struct Args {
     /// List of tables to register, in the format "name=glob"
     #[arg(short, long, required = true, value_parser = parse_table)]
