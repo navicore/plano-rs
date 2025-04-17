@@ -1,17 +1,17 @@
 # plano-rs
 
-A Rust-based analytics sync and query server using Apache Arrow and gRPC.
+A Rust-based analytics sync and query server using Apache Arrow, Parquet,
+Datafusion, and gRPC.
 
-# UNDER CONSTRUCTION
+setup dev env and install via:
 
-# UNDER CONSTRUCTION
-
-# UNDER CONSTRUCTION
-
-setup / install via:
-
+on mac:
 ``
 brew install protobuf duckdb postgres
+git clone <this repo>
+cd <this repo>
+cargo build --release --workspace
+see target/release/
 ``
 
 Run postgres
@@ -96,11 +96,10 @@ duckdb -c "SELECT * FROM '/tmp/users.parquet' LIMIT 5"
 Use the query cli for multi file multi table queries
 
 ```
-cargo run -p query-cli -- \
+cargo run -p plano-query -- \
   --table users="/tmp/users*.parquet" \
   --table employees="/tmp/employees*.parquet" \
   --table crm="/tmp/crm*.parquet" \
   --query "SELECT employees.id, employees.name, crm.cust_email FROM employees JOIN crm ON employees.email = crm.rep_email"
 ```
-
 

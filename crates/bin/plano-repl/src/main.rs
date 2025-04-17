@@ -14,7 +14,7 @@ use tracing::error;
 
 /// Command-line arguments for the query CLI
 #[derive(Parser, Debug)]
-#[command(name = "query-cli")]
+#[command(name = "plano-repl")]
 struct Args {
     /// Start in interactive REPL mode
     #[arg(long)]
@@ -95,7 +95,7 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::builder().auto_add_history(true).build();
     let history_path = dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("query-cli-history.txt");
+        .join("plano-query-history.txt");
 
     let mut rl = LineEditor::<(), FileHistory>::with_history(config, FileHistory::new())?;
     rl.set_edit_mode(rustyline::config::EditMode::Vi);

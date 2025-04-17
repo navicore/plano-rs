@@ -21,7 +21,7 @@ use std::collections::HashMap;
 
 /// Command-line arguments for the sync CLI
 #[derive(Parser, Debug)]
-#[command(name = "sync-cli")]
+#[command(name = "plano-sync")]
 #[command(about = "Synchronize a table from Postgres and write Parquet with optional partitioning", long_about = None)]
 struct Args {
     /// Name of the table to sync
