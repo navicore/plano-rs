@@ -6,10 +6,12 @@ use glob::glob;
 use plano_core::format::{format_batches, OutputFormat};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
+use tracing::{error, info};
 use warp::http::HeaderMap;
 use warp::http::{Response, StatusCode};
 use warp::Filter;
 
+/// A simple DataFusion-based query server that serves SQL queries and table metadata
 #[derive(Parser, Debug)]
 #[command(name = "queryd")]
 struct Args {
@@ -20,6 +22,7 @@ struct Args {
     bind: String,
 }
 
+/// Parses a table definition in the format "name=glob"
 fn parse_table(s: &str) -> Result<(String, String), String> {
     let parts: Vec<_> = s.splitn(2, '=').collect();
     if parts.len() != 2 {
@@ -28,6 +31,7 @@ fn parse_table(s: &str) -> Result<(String, String), String> {
     Ok((parts[0].to_string(), parts[1].to_string()))
 }
 
+/// Handles the `/tables` endpoint to list tables and their row counts
 async fn handle_tables(
     ctx: Arc<SessionContext>,
     headers: HeaderMap,
@@ -94,10 +98,12 @@ async fn handle_tables(
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
     let args = Args::parse();
     let ctx = Arc::new(SessionContext::new());
     let mut table_paths: HashMap<String, Vec<String>> = HashMap::new();
 
+    // Load tables from glob patterns
     for (name, pattern) in &args.table {
         #[allow(clippy::expect_used)]
         let files: Vec<_> = glob(pattern)
@@ -108,7 +114,7 @@ async fn main() -> anyhow::Result<()> {
             .collect();
 
         if files.is_empty() {
-            eprintln!("No files matched for table '{name}': {pattern}");
+            error!("No files matched for table '{name}': {pattern}");
             continue;
         }
 
@@ -133,6 +139,7 @@ async fn main() -> anyhow::Result<()> {
     let ctx_filter = warp::any().map(move || ctx.clone());
     let paths_filter = warp::any().map(move || shared_paths.clone());
 
+    // Define the routes
     let query_route = warp::path("query")
         .and(warp::post())
         .and(warp::body::form())
@@ -147,9 +154,10 @@ async fn main() -> anyhow::Result<()> {
         .and(warp::header::headers_cloned())
         .and_then(handle_tables);
 
+    // Combine the routes
     let routes = query_route.or(tables_route);
 
-    println!("Serving on http://{}", args.bind);
+    info!("Serving on http://{}", args.bind);
     let addr: std::net::SocketAddr = args.bind.parse()?;
     warp::serve(routes).run(addr).await;
 

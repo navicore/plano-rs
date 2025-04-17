@@ -9,6 +9,7 @@ use rustyline::Config;
 use rustyline::Editor as LineEditor;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use tracing::error;
 
 #[derive(Parser, Debug)]
 #[command(name = "query-cli")]
@@ -39,6 +40,7 @@ fn parse_table(s: &str) -> Result<(String, String), String> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
     let args = Args::parse();
     let ctx = SessionContext::new();
     let mut table_paths: HashMap<String, Vec<String>> = HashMap::new();
@@ -53,7 +55,7 @@ async fn main() -> anyhow::Result<()> {
             .collect();
 
         if files.is_empty() {
-            eprintln!("No files matched for table '{name}': {pattern}");
+            error!("No files matched for table '{name}': {pattern}");
             continue;
         }
 
@@ -82,7 +84,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if !args.repl {
-        eprintln!("No query provided and --repl not set. Exiting.");
+        error!("No query provided and --repl not set. Exiting.");
         return Ok(());
     }
 
@@ -120,17 +122,17 @@ async fn main() -> anyhow::Result<()> {
                                 .map_err(|e| anyhow::anyhow!(e))
                             {
                                 Ok(output) => println!("{output}"),
-                                Err(e) => eprintln!("format error: {e}"),
+                                Err(e) => error!("format error: {e}"),
                             }
                         }
-                        Err(e) => eprintln!("query error: {e}"),
+                        Err(e) => error!("query error: {e}"),
                     },
-                    Err(e) => eprintln!("sql error: {e}"),
+                    Err(e) => error!("sql error: {e}"),
                 }
             }
             Err(ReadlineError::Interrupted | ReadlineError::Eof) => break,
             Err(err) => {
-                eprintln!("Error: {err}");
+                error!("Error: {err}");
                 break;
             }
         }
