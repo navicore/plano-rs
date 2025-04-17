@@ -103,3 +103,12 @@ cargo run -p plano-query -- \
   --query "SELECT employees.id, employees.name, crm.cust_email FROM employees JOIN crm ON employees.email = crm.rep_email"
 ```
 
+for plano-serv:
+
+```
+curl -H "Accept: application/json" -X POST -d "sql=SELECT * FROM signalk LIMIT 5" http://127.0.0.1:8080/query | jq
+
+curl -H "Accept: text/plain" -X POST -d "sql=SELECT * FROM signalk LIMIT 5" http://127.0.0.1:8080/query
+
+curl -H "Accept: text/csv" -X POST -d "sql=SELECT * FROM signalk LIMIT 5" http://127.0.0.1:8080/query
+```
