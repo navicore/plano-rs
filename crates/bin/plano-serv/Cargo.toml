@@ -17,4 +17,6 @@ tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 warp = { workspace = true }
+bytes = { workspace = true }
+serde_urlencoded = { workspace = true }
 

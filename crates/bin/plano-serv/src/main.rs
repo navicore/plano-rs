@@ -1,18 +1,24 @@
 /// A simple DataFusion-based query server that serves SQL queries and table metadata
+use bytes::Bytes;
 use clap::Parser;
 use datafusion::arrow::array::{Int64Array, RecordBatch, StringArray};
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
+use datafusion::datasource::file_format::parquet::ParquetFormat;
+use datafusion::datasource::listing::{
+    ListingOptions, ListingTable, ListingTableConfig, ListingTableUrl,
+};
 use datafusion::prelude::*;
-use glob::glob;
 use lru::LruCache;
 use plano_core::format::{format_batches, OutputFormat};
 use std::num::NonZero;
 use std::{collections::HashMap, sync::Arc};
+use table_spec::TableSpec;
 use tokio::sync::Mutex;
-use tokio::sync::RwLock;
-use tracing::{debug, error, info};
+use tracing::{debug, info, warn};
 use warp::http::{HeaderMap, Response, StatusCode};
 use warp::Filter;
+
+mod table_spec;
 
 // Cache up to 100 distinct queries in memory
 type QueryCache = Arc<Mutex<LruCache<String, Vec<RecordBatch>>>>;
@@ -21,22 +27,15 @@ type QueryCache = Arc<Mutex<LruCache<String, Vec<RecordBatch>>>>;
 #[derive(Parser, Debug)]
 #[command(name = "plano-serv")]
 struct Args {
-    /// List of tables to register, in the format "name=glob"
-    #[arg(short, long, required = true, value_parser = parse_table)]
-    table: Vec<(String, String)>,
+    /// One or more table-specs in the form
+    ///   name=path[:col1,col2,...]
+    /// e.g. --table-spec events=/data/parquet/events:year,month,day
+    #[arg(long, short, action = clap::ArgAction::Append, required=true)]
+    table_spec: Vec<String>,
 
     /// Address to bind the server to
     #[arg(long, default_value = "127.0.0.1:8080")]
     bind: String,
-}
-
-/// Parses a table definition in the format "name=glob"
-fn parse_table(s: &str) -> Result<(String, String), String> {
-    let parts: Vec<_> = s.splitn(2, '=').collect();
-    if parts.len() != 2 {
-        return Err("Expected format: name=glob".to_string());
-    }
-    Ok((parts[0].to_string(), parts[1].to_string()))
 }
 
 /// Handles the `/tables` endpoint to list tables and their row counts
@@ -104,12 +103,40 @@ async fn handle_tables(
     Ok(warp::reply::with_header(body, "Content-Type", content_type))
 }
 
+// In Cargo.toml, add:
+// bytes = "1.4"
+// serde_urlencoded = "0.7"
+
+/// A custom rejection so we can return a 400 on form‐parse errors
+#[derive(Debug)]
+struct MyBadRequest;
+
+impl warp::reject::Reject for MyBadRequest {}
+/// Unified query handler that first captures raw bytes,
+/// optionally logs them, then parses as form and delegates.
+async fn handle_query_bytes(
+    raw_body: Bytes,
+    ctx: Arc<SessionContext>,
+    cache: QueryCache,
+    headers: HeaderMap,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // 1) Debug print the raw payload if you like:
+    debug!("QUERY RAW BODY = {:?}", std::str::from_utf8(&raw_body));
+
+    let form: HashMap<String, String> = serde_urlencoded::from_bytes(&raw_body).map_err(|e| {
+        warn!("form parse error: {}", e);
+        warp::reject::custom(MyBadRequest)
+    })?;
+
+    // 3) Call your existing handler
+    handle_query(form, ctx, cache, headers).await
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     let args = Args::parse();
     let ctx = Arc::new(SessionContext::new());
-    let mut table_paths: HashMap<String, Vec<String>> = HashMap::new();
 
     let cache_size = NonZero::new(100).unwrap_or_else(|| {
         panic!("Cache size must be a non-zero value");
@@ -117,52 +144,66 @@ async fn main() -> anyhow::Result<()> {
 
     let cache: QueryCache = Arc::new(Mutex::new(LruCache::new(cache_size)));
 
-    // Load tables from glob patterns
-    for (name, pattern) in &args.table {
-        #[allow(clippy::expect_used)]
-        let files: Vec<_> = glob(pattern)
-            .expect("Invalid glob pattern")
-            .filter_map(Result::ok)
-            .filter(|p| p.extension().is_some_and(|e| e == "parquet"))
-            .map(|p| p.to_string_lossy().to_string())
-            .collect();
-
-        if files.is_empty() {
-            error!("No files matched for table '{name}': {pattern}");
-            continue;
+    // Parse each spec and register
+    for raw in &args.table_spec {
+        let spec = TableSpec::parse(raw).map_err(|e| anyhow::anyhow!(e))?;
+        let raw_root = &spec.root;
+        let mut root_prefix = if raw_root.starts_with("s3://") {
+            raw_root.clone()
+        } else {
+            let abs = std::fs::canonicalize(raw_root)?;
+            abs.display().to_string()
+        };
+        if !root_prefix.ends_with('/') {
+            root_prefix.push('/');
         }
 
-        table_paths.insert(name.clone(), files);
+        let listing_url = ListingTableUrl::parse(&root_prefix)?;
+
+        let listing_opts = ListingOptions::new(Arc::new(ParquetFormat::default()))
+            .with_file_extension(".parquet")
+            // map each partition name to a (column_name, DataType) tuple:
+            .with_table_partition_cols(
+                spec.partitions
+                    .iter()
+                    .map(|col| (col.clone(), DataType::Utf8))
+                    .collect::<Vec<(String, DataType)>>(),
+            );
+        // Prepend file:// if it isn't already an object store URL
+        let store_url = if spec.root.starts_with("s3://") {
+            spec.root.clone()
+        } else {
+            // ensure absolute paths are file://
+            let abs = std::fs::canonicalize(&spec.root)?;
+            format!("file://{}", abs.display())
+        };
+
+        // Build the base config
+        let config = ListingTableConfig::new(listing_url).with_listing_options(listing_opts);
+
+        // This async call _returns_ a ListingTableConfig with its schema set for you
+        let config = config.infer_schema(&ctx.state()).await?;
+        // 4) Finally, turn it into a ListingTable and register:
+        let listing_table = ListingTable::try_new(config)?;
+        ctx.register_table(&spec.name, Arc::new(listing_table))?;
+
+        println!("Registered table `{}` at `{}`", spec.name, store_url);
     }
 
-    let shared_paths = Arc::new(RwLock::new(table_paths));
-
-    // Explicitly load tables at startup
-    {
-        let table_paths = shared_paths.read().await;
-        for (name, files) in table_paths.iter() {
-            if ctx.table(name).await.is_err() {
-                let df = ctx
-                    .read_parquet(files.clone(), ParquetReadOptions::default())
-                    .await?;
-                ctx.register_table(name, df.into_view())?;
-            }
-        }
-    }
+    // Parse
 
     let ctx_filter = warp::any().map(move || ctx.clone());
-    let paths_filter = warp::any().map(move || shared_paths.clone());
+    //let paths_filter = warp::any().map(move || shared_paths.clone());
     let cache_filter = warp::any().map(move || cache.clone());
 
-    // Define the routes
+    // In main(), replace the old `query_route` with:
     let query_route = warp::path("query")
         .and(warp::post())
-        .and(warp::body::form())
+        .and(warp::body::bytes()) // grab raw bytes once
         .and(ctx_filter.clone())
-        .and(paths_filter.clone())
         .and(cache_filter.clone())
         .and(warp::header::headers_cloned())
-        .and_then(handle_query);
+        .and_then(handle_query_bytes);
 
     let tables_route = warp::path("tables")
         .and(warp::get())
@@ -170,8 +211,9 @@ async fn main() -> anyhow::Result<()> {
         .and(warp::header::headers_cloned())
         .and_then(handle_tables);
 
-    // Combine the routes
-    let routes = query_route.or(tables_route);
+    let routes = query_route // your old form‑based route
+        .or(tables_route)
+        .with(warp::log("plano-serv"));
 
     info!("Serving on http://{}", args.bind);
     let addr: std::net::SocketAddr = args.bind.parse()?;
@@ -184,7 +226,6 @@ async fn main() -> anyhow::Result<()> {
 async fn handle_query(
     form: HashMap<String, String>,
     ctx: Arc<SessionContext>,
-    paths: Arc<RwLock<HashMap<String, Vec<String>>>>,
     cache: QueryCache,
     headers: HeaderMap,
 ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -207,19 +248,19 @@ async fn handle_query(
             .map_or_else(|_| Err(warp::reject()), Ok);
     }
 
-    for (name, files) in paths.read().await.iter() {
-        if ctx.table(name).await.is_err() {
-            let df = ctx
-                .read_parquet(files.clone(), ParquetReadOptions::default())
-                .await
-                .map_err(|_| warp::reject())?;
-            ctx.register_table(name, df.into_view())
-                .map_err(|_| warp::reject())?;
-        }
-    }
+    debug!("handle_query: {query}");
+    //let df = ctx.sql(query).await.map_err(|_| warp::reject())?;
 
-    let df = ctx.sql(query).await.map_err(|_| warp::reject())?;
+    let df = match ctx.sql(query).await {
+        Ok(df) => df,
+        Err(e) => {
+            warn!("❌ DataFusion `ctx.sql` error for '{}':\n  {}", query, e);
+            return Err(warp::reject());
+        }
+    };
+
     let results = df.collect().await.map_err(|_| warp::reject())?;
+    debug!("handle_query results: {results:?}");
 
     // store in cache
     cache.lock().await.put(query.clone(), results.clone());
