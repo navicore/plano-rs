@@ -1,7 +1,7 @@
 /// A single table registration spec:
 /// name        — the SQL name clients will use (e.g. "events")
 /// root        — a file:// or s3:// URI pointing at the top-level directory
-/// partitions  — zero or more folder-key names (e.g. ["year","month","day"])
+/// partitions  — zero or more folder-key names
 #[derive(Debug)]
 pub struct TableSpec {
     pub name: String,
@@ -19,7 +19,7 @@ impl TableSpec {
         // split off name=rest
         let (name, rest) = s
             .split_once('=')
-            .ok_or_else(|| format!("Invalid table-spec `{}`", s))?;
+            .ok_or_else(|| format!("Invalid table-spec `{s}`"))?;
         // split off optional :part1,part2
         let (root, parts) = if let Some((r, p)) = rest.split_once(':') {
             (r, p)
@@ -29,9 +29,9 @@ impl TableSpec {
         let partitions = if parts.is_empty() {
             Vec::new()
         } else {
-            parts.split(',').map(|p| p.to_string()).collect()
+            parts.split(',').map(ToString::to_string).collect()
         };
-        Ok(TableSpec {
+        Ok(Self {
             name: name.to_string(),
             root: root.to_string(),
             partitions,

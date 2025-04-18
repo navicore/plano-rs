@@ -1,4 +1,5 @@
 /// A simple DataFusion-based query server that serves SQL queries and table metadata
+use bytes::Bytes;
 use clap::Parser;
 use datafusion::arrow::array::{Int64Array, RecordBatch, StringArray};
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
@@ -13,7 +14,7 @@ use std::num::NonZero;
 use std::{collections::HashMap, sync::Arc};
 use table_spec::TableSpec;
 use tokio::sync::Mutex;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use warp::http::{HeaderMap, Response, StatusCode};
 use warp::Filter;
 
@@ -102,6 +103,35 @@ async fn handle_tables(
     Ok(warp::reply::with_header(body, "Content-Type", content_type))
 }
 
+// In Cargo.toml, add:
+// bytes = "1.4"
+// serde_urlencoded = "0.7"
+
+/// A custom rejection so we can return a 400 on form‐parse errors
+#[derive(Debug)]
+struct MyBadRequest;
+
+impl warp::reject::Reject for MyBadRequest {}
+/// Unified query handler that first captures raw bytes,
+/// optionally logs them, then parses as form and delegates.
+async fn handle_query_bytes(
+    raw_body: Bytes,
+    ctx: Arc<SessionContext>,
+    cache: QueryCache,
+    headers: HeaderMap,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // 1) Debug print the raw payload if you like:
+    debug!("QUERY RAW BODY = {:?}", std::str::from_utf8(&raw_body));
+
+    let form: HashMap<String, String> = serde_urlencoded::from_bytes(&raw_body).map_err(|e| {
+        warn!("form parse error: {}", e);
+        warp::reject::custom(MyBadRequest)
+    })?;
+
+    // 3) Call your existing handler
+    handle_query(form, ctx, cache, headers).await
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
@@ -117,29 +147,17 @@ async fn main() -> anyhow::Result<()> {
     // Parse each spec and register
     for raw in &args.table_spec {
         let spec = TableSpec::parse(raw).map_err(|e| anyhow::anyhow!(e))?;
-        // 1) Wrap in the proper URL type:
-        let store_url = if spec.root.starts_with("s3://") {
-            spec.root.clone()
-        } else {
-            let abs = std::fs::canonicalize(&spec.root)?;
-            format!("file://{}", abs.display())
-        };
-        // Normalize root into a directory prefix (with trailing slash)
         let raw_root = &spec.root;
         let mut root_prefix = if raw_root.starts_with("s3://") {
             raw_root.clone()
         } else {
-            // canonicalize to absolute path
             let abs = std::fs::canonicalize(raw_root)?;
             abs.display().to_string()
         };
-        // make sure it ends with '/'
         if !root_prefix.ends_with('/') {
             root_prefix.push('/');
         }
 
-        // Now parse that as a ListingTableUrl.
-        // Note: `ListingTableUrl::parse` will detect "s3://" vs plain local path.
         let listing_url = ListingTableUrl::parse(&root_prefix)?;
 
         let listing_opts = ListingOptions::new(Arc::new(ParquetFormat::default()))
@@ -178,15 +196,14 @@ async fn main() -> anyhow::Result<()> {
     //let paths_filter = warp::any().map(move || shared_paths.clone());
     let cache_filter = warp::any().map(move || cache.clone());
 
-    // Define the routes
+    // In main(), replace the old `query_route` with:
     let query_route = warp::path("query")
         .and(warp::post())
-        .and(warp::body::form())
+        .and(warp::body::bytes()) // grab raw bytes once
         .and(ctx_filter.clone())
-        //.and(paths_filter.clone())
         .and(cache_filter.clone())
         .and(warp::header::headers_cloned())
-        .and_then(handle_query);
+        .and_then(handle_query_bytes);
 
     let tables_route = warp::path("tables")
         .and(warp::get())
@@ -194,8 +211,10 @@ async fn main() -> anyhow::Result<()> {
         .and(warp::header::headers_cloned())
         .and_then(handle_tables);
 
-    // Combine the routes
-    let routes = query_route.or(tables_route).with(warp::log("plano-serv"));
+    let routes = query_route // your old form‑based route
+        .or(tables_route)
+        .with(warp::log("plano-serv"));
+
     info!("Serving on http://{}", args.bind);
     let addr: std::net::SocketAddr = args.bind.parse()?;
     warp::serve(routes).run(addr).await;
@@ -229,8 +248,19 @@ async fn handle_query(
             .map_or_else(|_| Err(warp::reject()), Ok);
     }
 
-    let df = ctx.sql(query).await.map_err(|_| warp::reject())?;
+    debug!("handle_query: {query}");
+    //let df = ctx.sql(query).await.map_err(|_| warp::reject())?;
+
+    let df = match ctx.sql(query).await {
+        Ok(df) => df,
+        Err(e) => {
+            warn!("❌ DataFusion `ctx.sql` error for '{}':\n  {}", query, e);
+            return Err(warp::reject());
+        }
+    };
+
     let results = df.collect().await.map_err(|_| warp::reject())?;
+    debug!("handle_query results: {results:?}");
 
     // store in cache
     cache.lock().await.put(query.clone(), results.clone());
