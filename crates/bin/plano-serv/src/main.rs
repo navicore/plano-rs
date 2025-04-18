@@ -4,13 +4,18 @@ use datafusion::arrow::array::{Int64Array, RecordBatch, StringArray};
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
 use datafusion::prelude::*;
 use glob::glob;
+use lru::LruCache;
 use plano_core::format::{format_batches, OutputFormat};
+use std::num::NonZero;
 use std::{collections::HashMap, sync::Arc};
+use tokio::sync::Mutex;
 use tokio::sync::RwLock;
-use tracing::{error, info};
-use warp::http::HeaderMap;
-use warp::http::{Response, StatusCode};
+use tracing::{debug, error, info};
+use warp::http::{HeaderMap, Response, StatusCode};
 use warp::Filter;
+
+// Cache up to 100 distinct queries in memory
+type QueryCache = Arc<Mutex<LruCache<String, Vec<RecordBatch>>>>;
 
 /// Command-line arguments for the query server
 #[derive(Parser, Debug)]
@@ -106,6 +111,12 @@ async fn main() -> anyhow::Result<()> {
     let ctx = Arc::new(SessionContext::new());
     let mut table_paths: HashMap<String, Vec<String>> = HashMap::new();
 
+    let cache_size = NonZero::new(100).unwrap_or_else(|| {
+        panic!("Cache size must be a non-zero value");
+    });
+
+    let cache: QueryCache = Arc::new(Mutex::new(LruCache::new(cache_size)));
+
     // Load tables from glob patterns
     for (name, pattern) in &args.table {
         #[allow(clippy::expect_used)]
@@ -141,6 +152,7 @@ async fn main() -> anyhow::Result<()> {
 
     let ctx_filter = warp::any().map(move || ctx.clone());
     let paths_filter = warp::any().map(move || shared_paths.clone());
+    let cache_filter = warp::any().map(move || cache.clone());
 
     // Define the routes
     let query_route = warp::path("query")
@@ -148,6 +160,7 @@ async fn main() -> anyhow::Result<()> {
         .and(warp::body::form())
         .and(ctx_filter.clone())
         .and(paths_filter.clone())
+        .and(cache_filter.clone())
         .and(warp::header::headers_cloned())
         .and_then(handle_query);
 
@@ -172,14 +185,27 @@ async fn handle_query(
     form: HashMap<String, String>,
     ctx: Arc<SessionContext>,
     paths: Arc<RwLock<HashMap<String, Vec<String>>>>,
-    headers: warp::http::HeaderMap,
+    cache: QueryCache,
+    headers: HeaderMap,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    // Check
     let Some(query) = form.get("sql") else {
         return Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body("Missing 'sql'".into())
             .map_or_else(|_| Err(warp::reject()), Ok);
     };
+
+    // Try hit using query as cache key
+    if let Some(cached_batches) = cache.lock().await.get(query) {
+        debug!("Cache hit for {}", &query);
+        let body =
+            format_batches(cached_batches, OutputFormat::Json).map_err(|_| warp::reject())?;
+        return Response::builder()
+            .status(StatusCode::OK)
+            .body(body)
+            .map_or_else(|_| Err(warp::reject()), Ok);
+    }
 
     for (name, files) in paths.read().await.iter() {
         if ctx.table(name).await.is_err() {
@@ -195,6 +221,10 @@ async fn handle_query(
     let df = ctx.sql(query).await.map_err(|_| warp::reject())?;
     let results = df.collect().await.map_err(|_| warp::reject())?;
 
+    // store in cache
+    cache.lock().await.put(query.clone(), results.clone());
+
+    // then format & reply as before
     let accept = headers
         .get("accept")
         .and_then(|v| v.to_str().ok())
