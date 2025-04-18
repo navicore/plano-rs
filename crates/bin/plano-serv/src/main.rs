@@ -2,17 +2,22 @@
 use clap::Parser;
 use datafusion::arrow::array::{Int64Array, RecordBatch, StringArray};
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
+use datafusion::datasource::file_format::parquet::ParquetFormat;
+use datafusion::datasource::listing::{
+    ListingOptions, ListingTable, ListingTableConfig, ListingTableUrl,
+};
 use datafusion::prelude::*;
-use glob::glob;
 use lru::LruCache;
 use plano_core::format::{format_batches, OutputFormat};
 use std::num::NonZero;
 use std::{collections::HashMap, sync::Arc};
+use table_spec::TableSpec;
 use tokio::sync::Mutex;
-use tokio::sync::RwLock;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 use warp::http::{HeaderMap, Response, StatusCode};
 use warp::Filter;
+
+mod table_spec;
 
 // Cache up to 100 distinct queries in memory
 type QueryCache = Arc<Mutex<LruCache<String, Vec<RecordBatch>>>>;
@@ -21,22 +26,15 @@ type QueryCache = Arc<Mutex<LruCache<String, Vec<RecordBatch>>>>;
 #[derive(Parser, Debug)]
 #[command(name = "plano-serv")]
 struct Args {
-    /// List of tables to register, in the format "name=glob"
-    #[arg(short, long, required = true, value_parser = parse_table)]
-    table: Vec<(String, String)>,
+    /// One or more table-specs in the form
+    ///   name=path[:col1,col2,...]
+    /// e.g. --table-spec events=/data/parquet/events:year,month,day
+    #[arg(long, short, action = clap::ArgAction::Append, required=true)]
+    table_spec: Vec<String>,
 
     /// Address to bind the server to
     #[arg(long, default_value = "127.0.0.1:8080")]
     bind: String,
-}
-
-/// Parses a table definition in the format "name=glob"
-fn parse_table(s: &str) -> Result<(String, String), String> {
-    let parts: Vec<_> = s.splitn(2, '=').collect();
-    if parts.len() != 2 {
-        return Err("Expected format: name=glob".to_string());
-    }
-    Ok((parts[0].to_string(), parts[1].to_string()))
 }
 
 /// Handles the `/tables` endpoint to list tables and their row counts
@@ -109,7 +107,6 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     let args = Args::parse();
     let ctx = Arc::new(SessionContext::new());
-    let mut table_paths: HashMap<String, Vec<String>> = HashMap::new();
 
     let cache_size = NonZero::new(100).unwrap_or_else(|| {
         panic!("Cache size must be a non-zero value");
@@ -117,41 +114,68 @@ async fn main() -> anyhow::Result<()> {
 
     let cache: QueryCache = Arc::new(Mutex::new(LruCache::new(cache_size)));
 
-    // Load tables from glob patterns
-    for (name, pattern) in &args.table {
-        #[allow(clippy::expect_used)]
-        let files: Vec<_> = glob(pattern)
-            .expect("Invalid glob pattern")
-            .filter_map(Result::ok)
-            .filter(|p| p.extension().is_some_and(|e| e == "parquet"))
-            .map(|p| p.to_string_lossy().to_string())
-            .collect();
-
-        if files.is_empty() {
-            error!("No files matched for table '{name}': {pattern}");
-            continue;
+    // Parse each spec and register
+    for raw in &args.table_spec {
+        let spec = TableSpec::parse(raw).map_err(|e| anyhow::anyhow!(e))?;
+        // 1) Wrap in the proper URL type:
+        let store_url = if spec.root.starts_with("s3://") {
+            spec.root.clone()
+        } else {
+            let abs = std::fs::canonicalize(&spec.root)?;
+            format!("file://{}", abs.display())
+        };
+        // Normalize root into a directory prefix (with trailing slash)
+        let raw_root = &spec.root;
+        let mut root_prefix = if raw_root.starts_with("s3://") {
+            raw_root.clone()
+        } else {
+            // canonicalize to absolute path
+            let abs = std::fs::canonicalize(raw_root)?;
+            abs.display().to_string()
+        };
+        // make sure it ends with '/'
+        if !root_prefix.ends_with('/') {
+            root_prefix.push('/');
         }
 
-        table_paths.insert(name.clone(), files);
+        // Now parse that as a ListingTableUrl.
+        // Note: `ListingTableUrl::parse` will detect "s3://" vs plain local path.
+        let listing_url = ListingTableUrl::parse(&root_prefix)?;
+
+        let listing_opts = ListingOptions::new(Arc::new(ParquetFormat::default()))
+            .with_file_extension(".parquet")
+            // map each partition name to a (column_name, DataType) tuple:
+            .with_table_partition_cols(
+                spec.partitions
+                    .iter()
+                    .map(|col| (col.clone(), DataType::Utf8))
+                    .collect::<Vec<(String, DataType)>>(),
+            );
+        // Prepend file:// if it isn't already an object store URL
+        let store_url = if spec.root.starts_with("s3://") {
+            spec.root.clone()
+        } else {
+            // ensure absolute paths are file://
+            let abs = std::fs::canonicalize(&spec.root)?;
+            format!("file://{}", abs.display())
+        };
+
+        // Build the base config
+        let config = ListingTableConfig::new(listing_url).with_listing_options(listing_opts);
+
+        // This async call _returns_ a ListingTableConfig with its schema set for you
+        let config = config.infer_schema(&ctx.state()).await?;
+        // 4) Finally, turn it into a ListingTable and register:
+        let listing_table = ListingTable::try_new(config)?;
+        ctx.register_table(&spec.name, Arc::new(listing_table))?;
+
+        println!("Registered table `{}` at `{}`", spec.name, store_url);
     }
 
-    let shared_paths = Arc::new(RwLock::new(table_paths));
-
-    // Explicitly load tables at startup
-    {
-        let table_paths = shared_paths.read().await;
-        for (name, files) in table_paths.iter() {
-            if ctx.table(name).await.is_err() {
-                let df = ctx
-                    .read_parquet(files.clone(), ParquetReadOptions::default())
-                    .await?;
-                ctx.register_table(name, df.into_view())?;
-            }
-        }
-    }
+    // Parse
 
     let ctx_filter = warp::any().map(move || ctx.clone());
-    let paths_filter = warp::any().map(move || shared_paths.clone());
+    //let paths_filter = warp::any().map(move || shared_paths.clone());
     let cache_filter = warp::any().map(move || cache.clone());
 
     // Define the routes
@@ -159,7 +183,7 @@ async fn main() -> anyhow::Result<()> {
         .and(warp::post())
         .and(warp::body::form())
         .and(ctx_filter.clone())
-        .and(paths_filter.clone())
+        //.and(paths_filter.clone())
         .and(cache_filter.clone())
         .and(warp::header::headers_cloned())
         .and_then(handle_query);
@@ -171,8 +195,7 @@ async fn main() -> anyhow::Result<()> {
         .and_then(handle_tables);
 
     // Combine the routes
-    let routes = query_route.or(tables_route);
-
+    let routes = query_route.or(tables_route).with(warp::log("plano-serv"));
     info!("Serving on http://{}", args.bind);
     let addr: std::net::SocketAddr = args.bind.parse()?;
     warp::serve(routes).run(addr).await;
@@ -184,7 +207,6 @@ async fn main() -> anyhow::Result<()> {
 async fn handle_query(
     form: HashMap<String, String>,
     ctx: Arc<SessionContext>,
-    paths: Arc<RwLock<HashMap<String, Vec<String>>>>,
     cache: QueryCache,
     headers: HeaderMap,
 ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -205,17 +227,6 @@ async fn handle_query(
             .status(StatusCode::OK)
             .body(body)
             .map_or_else(|_| Err(warp::reject()), Ok);
-    }
-
-    for (name, files) in paths.read().await.iter() {
-        if ctx.table(name).await.is_err() {
-            let df = ctx
-                .read_parquet(files.clone(), ParquetReadOptions::default())
-                .await
-                .map_err(|_| warp::reject())?;
-            ctx.register_table(name, df.into_view())
-                .map_err(|_| warp::reject())?;
-        }
     }
 
     let df = ctx.sql(query).await.map_err(|_| warp::reject())?;
