@@ -82,9 +82,7 @@ INSERT INTO crm (rep_email, cust_email) VALUES
 Run the sync / extract command
 
 ```
-cargo run -p sync-cli -- --table users
-cargo run -p sync-cli -- --table employees
-cargo run -p sync-cli -- --table crm
+cargo run -p plano-sync -- -t signalk_2 -p name -p year --timestamp-col navigation_position_timestamp --output-dir /tmp/parquet
 ```
 
 Query parquet files

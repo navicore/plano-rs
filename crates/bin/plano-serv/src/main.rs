@@ -10,6 +10,7 @@ use datafusion::datasource::listing::{
 use datafusion::prelude::*;
 use lru::LruCache;
 use plano_core::format::{format_batches, OutputFormat};
+use std::fmt::Display;
 use std::num::NonZero;
 use std::{collections::HashMap, sync::Arc};
 use table_spec::TableSpec;
@@ -107,11 +108,29 @@ async fn handle_tables(
 // bytes = "1.4"
 // serde_urlencoded = "0.7"
 
-/// A custom rejection so we can return a 400 on form‐parse errors
 #[derive(Debug)]
-struct MyBadRequest;
+struct PlanoServerError {
+    pub reason: String,
+}
+impl warp::reject::Reject for PlanoServerError {}
+impl Display for PlanoServerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Plano Server Error: {}", self.reason)
+    }
+}
 
-impl warp::reject::Reject for MyBadRequest {}
+#[derive(Debug)]
+struct PlanoBadRequest {
+    pub reason: String,
+}
+
+impl Display for PlanoBadRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Bad Request: {}", self.reason)
+    }
+}
+
+impl warp::reject::Reject for PlanoBadRequest {}
 /// Unified query handler that first captures raw bytes,
 /// optionally logs them, then parses as form and delegates.
 async fn handle_query_bytes(
@@ -125,7 +144,9 @@ async fn handle_query_bytes(
 
     let form: HashMap<String, String> = serde_urlencoded::from_bytes(&raw_body).map_err(|e| {
         warn!("form parse error: {}", e);
-        warp::reject::custom(MyBadRequest)
+        warp::reject::custom(PlanoBadRequest {
+            reason: e.to_string(),
+        })
     })?;
 
     // 3) Call your existing handler
@@ -234,7 +255,14 @@ async fn handle_query(
         return Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body("Missing 'sql'".into())
-            .map_or_else(|_| Err(warp::reject()), Ok);
+            .map_or_else(
+                |e| {
+                    Err(warp::reject::custom(PlanoBadRequest {
+                        reason: e.to_string(),
+                    }))
+                },
+                Ok,
+            );
     };
 
     // Try hit using query as cache key
@@ -245,7 +273,15 @@ async fn handle_query(
         return Response::builder()
             .status(StatusCode::OK)
             .body(body)
-            .map_or_else(|_| Err(warp::reject()), Ok);
+            //.map_or_else(|_| Err(warp::reject()), Ok);
+            .map_or_else(
+                |e| {
+                    Err(warp::reject::custom(PlanoBadRequest {
+                        reason: e.to_string(),
+                    }))
+                },
+                Ok,
+            );
     }
 
     debug!("handle_query: {query}");
@@ -255,7 +291,10 @@ async fn handle_query(
         Ok(df) => df,
         Err(e) => {
             warn!("❌ DataFusion `ctx.sql` error for '{}':\n  {}", query, e);
-            return Err(warp::reject());
+            return Err(PlanoServerError {
+                reason: e.to_string(),
+            }
+            .into());
         }
     };
 
