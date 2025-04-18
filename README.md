@@ -1,3 +1,5 @@
+[![Dependabot Updates](https://github.com/navicore/plano-rs/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/navicore/plano-rs/actions/workflows/dependabot/dependabot-updates) [![rust-clippy analyze](https://github.com/navicore/plano-rs/actions/workflows/rust-clippy.yml/badge.svg)](https://github.com/navicore/plano-rs/actions/workflows/rust-clippy.yml) [![Publish-Crate](https://github.com/navicore/plano-rs/actions/workflows/publish-crates.yml/badge.svg)](https://github.com/navicore/plano-rs/actions/workflows/publish-crates.yml)
+
 # plano-rs
 
 A Rust-based analytics sync and query server using Apache Arrow, Parquet,
@@ -82,9 +84,7 @@ INSERT INTO crm (rep_email, cust_email) VALUES
 Run the sync / extract command
 
 ```
-cargo run -p sync-cli -- --table users
-cargo run -p sync-cli -- --table employees
-cargo run -p sync-cli -- --table crm
+cargo run -p plano-sync -- -t signalk_2 -p name -p year --timestamp-col navigation_position_timestamp --output-dir /tmp/parquet
 ```
 
 Query parquet files

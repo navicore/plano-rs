@@ -29,16 +29,16 @@ struct Args {
     table: String,
 
     /// Print the `RecordBatch` to stdout
-    #[arg(short, long)]
+    #[arg(long)]
     print: bool,
 
     /// Directory in which to write Parquet files (default: /tmp)
-    #[arg(long, default_value = "/tmp")]
+    #[arg(long, short, default_value = "/tmp")]
     output_dir: String,
 
     /// Partition keys (can repeat).
     /// If using reserved time keys (year, month, day, hour), must set --timestamp-col.
-    #[arg(long, action = ArgAction::Append)]
+    #[arg(long, short, action = ArgAction::Append)]
     partition_by: Vec<String>,
 
     /// When partitioning by timestamp components, select which timestamp column to break down.
@@ -49,9 +49,10 @@ struct Args {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
-    let db_url = env::var("DATABASE_URL")?;
-    let pool = PgPoolOptions::new().connect(&db_url).await?;
     let args = Args::parse();
+    let db_url = env::var("DATABASE_URL")
+        .unwrap_or_else(|_| panic!("DATABASE_URL environment variable not set"));
+    let pool = PgPoolOptions::new().connect(&db_url).await?;
 
     // Validate reserved keys only with timestamp_col
     let reserved = ["year", "month", "day", "hour"];
