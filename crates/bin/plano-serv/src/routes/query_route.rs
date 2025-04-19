@@ -46,6 +46,10 @@ async fn handle_query(
             );
     };
 
+    // NOTE: caching based on query string is a simple approach.
+    // Ideally we'll cache the filesets used to satisfy the query since a few filesets in memory
+    // could satisfy many queries. TODO
+
     // Try hit using query as cache key
     if let Some(cached_batches) = cache.lock().await.get(query) {
         debug!("Cache hit for {}", &query);

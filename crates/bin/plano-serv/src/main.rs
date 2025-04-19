@@ -48,6 +48,10 @@ async fn main() -> anyhow::Result<()> {
     let ctx = Arc::new(SessionContext::new());
     let cache = routes::initialize_cache(100);
 
+    // Register tables based on the provided table specifications.
+    //
+    // These specifications enable datafusion to dynamically create glob specs and lazily read
+    // partitioned filesets into in-memory tables to satisfy newly arriving queries.
     register_tables(&ctx, &args.table_spec).await?;
 
     let routes = configure_routes(ctx, cache);
