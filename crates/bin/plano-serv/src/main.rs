@@ -10,6 +10,7 @@ use datafusion::datasource::listing::{
 use datafusion::prelude::*;
 use lru::LruCache;
 use plano_core::format::{format_batches, OutputFormat};
+use std::collections::HashSet;
 use std::fmt::Display;
 use std::num::NonZero;
 use std::{collections::HashMap, sync::Arc};
@@ -179,17 +180,17 @@ async fn main() -> anyhow::Result<()> {
             root_prefix.push('/');
         }
 
-        let listing_url = ListingTableUrl::parse(&root_prefix)?;
-
-        let listing_opts = ListingOptions::new(Arc::new(ParquetFormat::default()))
-            .with_file_extension(".parquet")
-            // map each partition name to a (column_name, DataType) tuple:
-            .with_table_partition_cols(
-                spec.partitions
-                    .iter()
-                    .map(|col| (col.clone(), DataType::Utf8))
-                    .collect::<Vec<(String, DataType)>>(),
-            );
+        // let listing_url = ListingTableUrl::parse(&root_prefix)?;
+        //
+        // let listing_opts = ListingOptions::new(Arc::new(ParquetFormat::default()))
+        //     .with_file_extension(".parquet")
+        //     // map each partition name to a (column_name, DataType) tuple:
+        //     .with_table_partition_cols(
+        //         spec.partitions
+        //             .iter()
+        //             .map(|col| (col.clone(), DataType::Utf8))
+        //             .collect::<Vec<(String, DataType)>>(),
+        //     );
         // Prepend file:// if it isn't already an object store URL
         let store_url = if spec.root.starts_with("s3://") {
             spec.root.clone()
@@ -200,13 +201,14 @@ async fn main() -> anyhow::Result<()> {
         };
 
         // Build the base config
-        let config = ListingTableConfig::new(listing_url).with_listing_options(listing_opts);
+        //let config = ListingTableConfig::new(listing_url).with_listing_options(listing_opts);
 
         // This async call _returns_ a ListingTableConfig with its schema set for you
-        let config = config.infer_schema(&ctx.state()).await?;
+        //let config = config.infer_schema(&ctx.state()).await?;
         // 4) Finally, turn it into a ListingTable and register:
-        let listing_table = ListingTable::try_new(config)?;
-        ctx.register_table(&spec.name, Arc::new(listing_table))?;
+        //let listing_table = ListingTable::try_new(config)?;
+        //ctx.register_table(&spec.name, Arc::new(listing_table))?;
+        let _ = register_table(&ctx, &spec).await;
 
         println!("Registered table `{}` at `{}`", spec.name, store_url);
     }
@@ -328,4 +330,51 @@ async fn handle_query(
         .header("Content-Type", content_type)
         .body(body)
         .map_or_else(|_| Err(warp::reject()), Ok)
+}
+
+// Registers a table in the DataFusion context using a `ListingTableConfig`
+//
+// The complexity is due to we use partition keys based on file data but once we start using a
+// file column as a partition key datafusion will fail in sql planning because it can't deal with
+// duplicate cols in the schema.  We need to scrub the file column when we are adding  a
+// partition key.
+async fn register_table(
+    ctx: &SessionContext,
+    spec: &TableSpec, // your own struct that holds name, path, partition list …
+) -> datafusion::error::Result<()> {
+    // 1. Prepare the base listing options -------------------------------
+    let base_opts = ListingOptions::new(Arc::new(ParquetFormat::default()))
+        .with_file_extension(".parquet")
+        .with_table_partition_cols(
+            spec.partitions
+                .iter()
+                .map(|c| (c.clone(), DataType::Utf8))
+                .collect(),
+        );
+
+    let table_url = ListingTableUrl::parse(&spec.root)?;
+
+    let session_state = ctx.state();
+    let file_schema = base_opts.infer_schema(&session_state, &table_url).await?;
+
+    let part_set: HashSet<&str> = spec.partitions.iter().map(String::as_str).collect();
+
+    // filter out the file columns that are also partition keys
+    let clean_fields: Vec<Field> = file_schema
+        .fields()
+        .iter()
+        .filter(|f| !part_set.contains(f.name().as_str()))
+        .map(|f| (**f).clone()) // <‑‑ convert Arc<Field> → Field
+        .collect();
+
+    let clean_schema = Arc::new(Schema::new(clean_fields));
+
+    let cfg = ListingTableConfig::new(table_url)
+        .with_listing_options(base_opts)
+        .with_schema(clean_schema); // <‑‑ this is the key :contentReference[oaicite:0]{index=0}
+
+    let table = ListingTable::try_new(cfg)?;
+    ctx.register_table(&spec.name, Arc::new(table))?;
+
+    Ok(())
 }
