@@ -106,7 +106,7 @@ cargo run -p plano-query -- \
 for plano-serv:
 
 ```
-cargo run -p plano-serv -- --table 'signalk=/tmp/parquet/signalk_2/mmsi=200005228/name=Boat 260/year=2025/**/*' 
+cargo run -p plano-serv -- --table-spec 'signalk=/tmp/parquet/signalk_2:name,year'
 ```
 
 ```
