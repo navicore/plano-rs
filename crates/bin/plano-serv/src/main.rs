@@ -180,18 +180,6 @@ async fn main() -> anyhow::Result<()> {
             root_prefix.push('/');
         }
 
-        // let listing_url = ListingTableUrl::parse(&root_prefix)?;
-        //
-        // let listing_opts = ListingOptions::new(Arc::new(ParquetFormat::default()))
-        //     .with_file_extension(".parquet")
-        //     // map each partition name to a (column_name, DataType) tuple:
-        //     .with_table_partition_cols(
-        //         spec.partitions
-        //             .iter()
-        //             .map(|col| (col.clone(), DataType::Utf8))
-        //             .collect::<Vec<(String, DataType)>>(),
-        //     );
-        // Prepend file:// if it isn't already an object store URL
         let store_url = if spec.root.starts_with("s3://") {
             spec.root.clone()
         } else {
@@ -200,14 +188,6 @@ async fn main() -> anyhow::Result<()> {
             format!("file://{}", abs.display())
         };
 
-        // Build the base config
-        //let config = ListingTableConfig::new(listing_url).with_listing_options(listing_opts);
-
-        // This async call _returns_ a ListingTableConfig with its schema set for you
-        //let config = config.infer_schema(&ctx.state()).await?;
-        // 4) Finally, turn it into a ListingTable and register:
-        //let listing_table = ListingTable::try_new(config)?;
-        //ctx.register_table(&spec.name, Arc::new(listing_table))?;
         let _ = register_table(&ctx, &spec).await;
 
         println!("Registered table `{}` at `{}`", spec.name, store_url);
@@ -216,10 +196,9 @@ async fn main() -> anyhow::Result<()> {
     // Parse
 
     let ctx_filter = warp::any().map(move || ctx.clone());
-    //let paths_filter = warp::any().map(move || shared_paths.clone());
+
     let cache_filter = warp::any().map(move || cache.clone());
 
-    // In main(), replace the old `query_route` with:
     let query_route = warp::path("query")
         .and(warp::post())
         .and(warp::body::bytes()) // grab raw bytes once
