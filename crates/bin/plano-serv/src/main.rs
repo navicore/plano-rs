@@ -245,7 +245,6 @@ async fn handle_query(
         return Response::builder()
             .status(StatusCode::OK)
             .body(body)
-            //.map_or_else(|_| Err(warp::reject()), Ok);
             .map_or_else(
                 |e| {
                     Err(warp::reject::custom(PlanoBadRequest {
@@ -257,7 +256,6 @@ async fn handle_query(
     }
 
     debug!("handle_query: {query}");
-    //let df = ctx.sql(query).await.map_err(|_| warp::reject())?;
 
     let df = match ctx.sql(query).await {
         Ok(df) => df,
