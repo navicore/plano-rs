@@ -22,7 +22,7 @@ use warp::Filter;
 
 mod table_spec;
 
-// Cache up to 100 distinct queries in memory
+// Cache distinct queries in memory
 type QueryCache = Arc<Mutex<LruCache<String, Vec<RecordBatch>>>>;
 
 /// Command-line arguments for the query server
@@ -105,10 +105,6 @@ async fn handle_tables(
     Ok(warp::reply::with_header(body, "Content-Type", content_type))
 }
 
-// In Cargo.toml, add:
-// bytes = "1.4"
-// serde_urlencoded = "0.7"
-
 #[derive(Debug)]
 struct PlanoServerError {
     pub reason: String,
@@ -132,17 +128,17 @@ impl Display for PlanoBadRequest {
 }
 
 impl warp::reject::Reject for PlanoBadRequest {}
+
 /// Unified query handler that first captures raw bytes,
 /// optionally logs them, then parses as form and delegates.
+/// Naturally we will lock this down or remove sql support all together in a production capable
+/// server.  For POC we're using sql in the API.
 async fn handle_query_bytes(
     raw_body: Bytes,
     ctx: Arc<SessionContext>,
     cache: QueryCache,
     headers: HeaderMap,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    // 1) Debug print the raw payload if you like:
-    debug!("QUERY RAW BODY = {:?}", std::str::from_utf8(&raw_body));
-
     let form: HashMap<String, String> = serde_urlencoded::from_bytes(&raw_body).map_err(|e| {
         warn!("form parse error: {}", e);
         warp::reject::custom(PlanoBadRequest {
@@ -150,7 +146,6 @@ async fn handle_query_bytes(
         })
     })?;
 
-    // 3) Call your existing handler
     handle_query(form, ctx, cache, headers).await
 }
 
@@ -321,7 +316,6 @@ async fn register_table(
     ctx: &SessionContext,
     spec: &TableSpec, // your own struct that holds name, path, partition list …
 ) -> datafusion::error::Result<()> {
-    // 1. Prepare the base listing options -------------------------------
     let base_opts = ListingOptions::new(Arc::new(ParquetFormat::default()))
         .with_file_extension(".parquet")
         .with_table_partition_cols(
