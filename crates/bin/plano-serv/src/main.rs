@@ -149,73 +149,69 @@ async fn handle_query_bytes(
     handle_query(form, ctx, cache, headers).await
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
-    let args = Args::parse();
-    let ctx = Arc::new(SessionContext::new());
+fn initialize_cache(size: usize) -> QueryCache {
+    #[allow(clippy::expect_used)]
+    Arc::new(Mutex::new(LruCache::new(
+        NonZero::new(size).expect("Cache size must be a non-zero value"),
+    )))
+}
 
-    let cache_size = NonZero::new(100).unwrap_or_else(|| {
-        panic!("Cache size must be a non-zero value");
-    });
-
-    let cache: QueryCache = Arc::new(Mutex::new(LruCache::new(cache_size)));
-
-    // Parse each spec and register
-    for raw in &args.table_spec {
-        let spec = TableSpec::parse(raw).map_err(|e| anyhow::anyhow!(e))?;
-        let raw_root = &spec.root;
-        let mut root_prefix = if raw_root.starts_with("s3://") {
-            raw_root.clone()
+async fn register_tables(ctx: &Arc<SessionContext>, table_specs: &[String]) -> anyhow::Result<()> {
+    for raw in table_specs {
+        let spec = TableSpec::parse(raw).map_err(anyhow::Error::msg)?;
+        let root_prefix = if spec.root.starts_with("s3://") {
+            spec.root.clone()
         } else {
-            let abs = std::fs::canonicalize(raw_root)?;
-            abs.display().to_string()
+            format!("{}/", std::fs::canonicalize(&spec.root)?.display())
         };
-        if !root_prefix.ends_with('/') {
-            root_prefix.push('/');
-        }
 
         let store_url = if spec.root.starts_with("s3://") {
             spec.root.clone()
         } else {
-            // ensure absolute paths are file://
-            let abs = std::fs::canonicalize(&spec.root)?;
-            format!("file://{}", abs.display())
+            format!("file://{root_prefix}")
         };
 
-        let _ = register_table(&ctx, &spec).await;
-
+        register_table(ctx, &spec).await?;
         println!("Registered table `{}` at `{}`", spec.name, store_url);
     }
+    Ok(())
+}
 
-    // Parse
-
+fn configure_routes(
+    ctx: Arc<SessionContext>,
+    cache: QueryCache,
+) -> impl warp::Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     let ctx_filter = warp::any().map(move || ctx.clone());
-
     let cache_filter = warp::any().map(move || cache.clone());
 
     let query_route = warp::path("query")
         .and(warp::post())
-        .and(warp::body::bytes()) // grab raw bytes once
+        .and(warp::body::bytes())
         .and(ctx_filter.clone())
-        .and(cache_filter.clone())
+        .and(cache_filter)
         .and(warp::header::headers_cloned())
         .and_then(handle_query_bytes);
 
     let tables_route = warp::path("tables")
         .and(warp::get())
-        .and(ctx_filter.clone())
+        .and(ctx_filter)
         .and(warp::header::headers_cloned())
         .and_then(handle_tables);
 
-    let routes = query_route // your old form‑based route
-        .or(tables_route)
-        .with(warp::log("plano-serv"));
+    query_route.or(tables_route).with(warp::log("plano-serv"))
+}
 
-    info!("Serving on http://{}", args.bind);
-    let addr: std::net::SocketAddr = args.bind.parse()?;
+async fn start_server(
+    bind: String,
+    routes: impl warp::Filter<Extract = impl warp::Reply, Error = warp::Rejection>
+        + Clone
+        + std::marker::Sync
+        + std::marker::Send
+        + 'static,
+) -> anyhow::Result<()> {
+    info!("Serving on http://{}", bind);
+    let addr: std::net::SocketAddr = bind.parse()?;
     warp::serve(routes).run(addr).await;
-
     Ok(())
 }
 
@@ -348,6 +344,22 @@ async fn register_table(
 
     let table = ListingTable::try_new(cfg)?;
     ctx.register_table(&spec.name, Arc::new(table))?;
+
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
+    let args = Args::parse();
+    let ctx = Arc::new(SessionContext::new());
+    let cache = initialize_cache(100);
+
+    register_tables(&ctx, &args.table_spec).await?;
+
+    let routes = configure_routes(ctx, cache);
+
+    start_server(args.bind, routes).await?;
 
     Ok(())
 }
