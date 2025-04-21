@@ -2,7 +2,7 @@
 
 # plano-rs
 
-A Rust-based analytics sync and query server using Apache Arrow, Parquet,
+A Rust-based glob sync and SQL query server using Apache [Arrow](https://arrow.apache.org/), Parquet,
 Datafusion, and gRPC (tbd).
 
 This is an experimental POC while I try to learn Apache Arrow / Datafusion.
