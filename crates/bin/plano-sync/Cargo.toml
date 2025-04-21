@@ -1,0 +1,18 @@
+[package]
+name = "plano-sync"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+arrow = { workspace = true, features = ["prettyprint"] }
+chrono = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+datafusion = { workspace = true }
+parquet = { workspace = true, features = ["arrow"] }
+rds-sync = { path = "../../rds-sync" }
+sqlx = { workspace = true, features = ["postgres", "runtime-tokio", "chrono"] }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tempfile = { workspace = true }

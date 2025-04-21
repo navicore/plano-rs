@@ -1,0 +1,33 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: "0 8 * * *"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install Protocol Buffers
+      run: |
+        PROTOC_VERSION=29.3
+        curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip
+        sudo apt-get install -y unzip
+        unzip protoc-${PROTOC_VERSION}-linux-x86_64.zip -d $HOME/protoc
+        echo "$HOME/protoc/bin" >> $GITHUB_PATH
+    - name: Verify protoc installation
+      run: protoc --version
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose

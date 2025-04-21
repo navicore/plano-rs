@@ -1,0 +1,28 @@
+[package]
+name = "plano-serv"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+bytes = { workspace = true }
+clap = { workspace = true }
+datafusion = { workspace = true }
+glob = { workspace = true }
+lru = { workspace = true }
+metrics = { workspace = true }
+object_store = { workspace = true }
+plano-core = { path = "../../core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_urlencoded = { workspace = true }
+tokio = { workspace = true }
+tonic = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+url = { workspace = true }
+urlencoding = { workspace = true }
+warp = { workspace = true }
+futures = { workspace = true }
+ocra = { workspace = true }
+metrics-exporter-prometheus = { workspace = true }
