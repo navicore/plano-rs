@@ -1,6 +1,6 @@
 // src/routes/rds.rs
 use datafusion::arrow::{
-    array::{ArrayRef, Int64Builder, StringBuilder},
+    array::{ArrayRef, Int32Builder, Int64Builder, Int8Builder, StringBuilder},
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
 };
@@ -10,6 +10,7 @@ use plano_core::format::format_batches;
 use std::convert::Infallible;
 use std::sync::Arc;
 use tokio_postgres::Row;
+use tracing::warn;
 use warp::{Filter, Rejection, Reply};
 
 /// Defines a filter that injects your PG pool into handlers
@@ -32,48 +33,54 @@ pub fn rds_route(
 }
 
 async fn handle_rds(ctx: Arc<SessionContext>, pool: Pool) -> Result<impl Reply, Rejection> {
+    warn!("Handling RDS request");
     // 1) fetch rows from Postgres
     let rows: Vec<Row> = pool
         .get()
         .await
         .map_err(|_| warp::reject())?
-        .query("SELECT id, username, value FROM events LIMIT 1000", &[])
+        .query(
+            "SELECT name,uuid,navigation_speedoverground_value FROM signalk_2 LIMIT 1000;",
+            &[],
+        )
         .await
         .map_err(|_| warp::reject())?;
 
+    warn!("Handling RDS request count {}", rows.len());
     // 2) build Arrow arrays
-    let mut id_b = Int64Builder::new();
-    let mut user_b = StringBuilder::new();
-    let mut val_b = Int64Builder::new();
+    let mut name = StringBuilder::new();
+    let mut uuid = StringBuilder::new();
+    let mut speed = Int32Builder::new();
     for row in rows {
-        id_b.append_value(row.get::<_, i64>("id"));
-        user_b.append_value(row.get::<_, &str>("username"));
-        val_b.append_value(row.get::<_, i64>("value"));
+        name.append_value(row.get::<_, &str>("name"));
+        uuid.append_value(row.get::<_, &str>("uuid"));
+        speed.append_value(row.get::<_, i32>("navigation_speedoverground_value"));
     }
     let schema = Arc::new(Schema::new(vec![
-        Field::new("id", DataType::Int64, false),
-        Field::new("username", DataType::Utf8, false),
-        Field::new("value", DataType::Int64, false),
+        Field::new("name", DataType::Utf8, false),
+        Field::new("uuid", DataType::Utf8, false),
+        Field::new("speed", DataType::Int32, false),
     ]));
     let batch = RecordBatch::try_new(
         schema.clone(),
         vec![
-            Arc::new(id_b.finish()) as ArrayRef,
-            Arc::new(user_b.finish()) as ArrayRef,
-            Arc::new(val_b.finish()) as ArrayRef,
+            Arc::new(name.finish()) as ArrayRef,
+            Arc::new(uuid.finish()) as ArrayRef,
+            Arc::new(speed.finish()) as ArrayRef,
         ],
     )
     .map_err(|_| warp::reject())?;
+    warn!("Handling RDS request ..................");
 
     // 3) register as an in-memory DataFusion table
     let table = MemTable::try_new(schema, vec![vec![batch]]).map_err(|_| warp::reject())?;
-    ctx.deregister_table("events").ok(); // if already exists
-    ctx.register_table("events", Arc::new(table))
+    ctx.deregister_table("signalk_2").ok(); // if already exists
+    ctx.register_table("signalk_2", Arc::new(table))
         .map_err(|_| warp::reject())?;
 
     // 4) run a simple SQL (or you could read a query param)
     let df = ctx
-        .sql("SELECT * FROM events")
+        .sql("SELECT * FROM signalk_2 LIMIT 10")
         .await
         .map_err(|_| warp::reject())?;
     let result = df.collect().await.map_err(|_| warp::reject())?;
