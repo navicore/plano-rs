@@ -1,6 +1,6 @@
 // src/routes/rds.rs
 use datafusion::arrow::{
-    array::{ArrayRef, Int32Builder, Int64Builder, Int8Builder, StringBuilder},
+    array::{ArrayRef, Int32Builder, StringBuilder},
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
 };
@@ -10,7 +10,6 @@ use plano_core::format::format_batches;
 use std::convert::Infallible;
 use std::sync::Arc;
 use tokio_postgres::Row;
-use tracing::warn;
 use warp::{Filter, Rejection, Reply};
 
 /// Defines a filter that injects your PG pool into handlers
@@ -33,7 +32,6 @@ pub fn rds_route(
 }
 
 async fn handle_rds(ctx: Arc<SessionContext>, pool: Pool) -> Result<impl Reply, Rejection> {
-    warn!("Handling RDS request");
     // 1) fetch rows from Postgres
     let rows: Vec<Row> = pool
         .get()
@@ -46,7 +44,6 @@ async fn handle_rds(ctx: Arc<SessionContext>, pool: Pool) -> Result<impl Reply, 
         .await
         .map_err(|_| warp::reject())?;
 
-    warn!("Handling RDS request count {}", rows.len());
     // 2) build Arrow arrays
     let mut name = StringBuilder::new();
     let mut uuid = StringBuilder::new();
@@ -70,7 +67,6 @@ async fn handle_rds(ctx: Arc<SessionContext>, pool: Pool) -> Result<impl Reply, 
         ],
     )
     .map_err(|_| warp::reject())?;
-    warn!("Handling RDS request ..................");
 
     // 3) register as an in-memory DataFusion table
     let table = MemTable::try_new(schema, vec![vec![batch]]).map_err(|_| warp::reject())?;
