@@ -7,10 +7,14 @@ use crate::Arc;
 use datafusion::prelude::SessionContext;
 pub use query_route::initialize_cache;
 use query_route::QueryCache;
+pub use rds::rds_route;
 use std::fmt::Display;
+use warp::reject::Rejection;
+use warp::reply::Reply;
 use warp::Filter;
 
 mod query_route;
+mod rds;
 mod table_route;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -37,11 +41,15 @@ impl Display for PlanoBadRequest {
 
 impl warp::reject::Reject for PlanoBadRequest {}
 
-pub fn configure_routes(
+pub fn configure_routes<
+    T: Filter<Extract = (impl Reply,), Error = Rejection> + Clone + Send + Sync + 'static,
+>(
     ctx: Arc<SessionContext>,
     cache: QueryCache,
+    rds_filter: T,
 ) -> impl warp::Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     let ctx_filter = warp::any().map(move || ctx.clone());
+
     let cache_filter = warp::any().map(move || cache.clone());
 
     let query_route = warp::path("query")
@@ -58,5 +66,8 @@ pub fn configure_routes(
         .and(warp::header::headers_cloned())
         .and_then(handle_tables);
 
-    query_route.or(tables_route).with(warp::log("plano-serv"))
+    query_route
+        .or(tables_route)
+        .or(rds_filter)
+        .with(warp::log("plano-serv"))
 }
