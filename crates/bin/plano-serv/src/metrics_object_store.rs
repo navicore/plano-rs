@@ -156,7 +156,7 @@ impl ObjectStore for MetricsObjectStore {
     #[doc = " `foo/bar_baz/x`. List is recursive, i.e. `foo/bar/more/x` will be included."]
     #[doc = ""]
     #[doc = " Note: the order of returned [`ObjectMeta`] is not guaranteed"]
-    fn list(&self, prefix: Option<&Path>) -> BoxStream<'_, Result<ObjectMeta>> {
+    fn list(&self, prefix: Option<&Path>) -> BoxStream<'static, Result<ObjectMeta>> {
         LIST.increment(1);
         self.inner.list(prefix)
     }
@@ -269,7 +269,7 @@ impl ObjectStore for MetricsObjectStore {
     fn get_range<'life0, 'life1, 'async_trait>(
         &'life0 self,
         location: &'life1 Path,
-        range: Range<usize>,
+        range: Range<u64>,
     ) -> ::core::pin::Pin<
         Box<
             dyn ::core::future::Future<Output = Result<Bytes>>
