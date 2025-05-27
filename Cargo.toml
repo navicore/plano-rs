@@ -17,12 +17,12 @@ anyhow = "1"
 arrow = {version = "55" }
 chrono = { version = "0.4", features = ["serde"] }
 clap = {version = "4.5", features = ["derive"] }
-datafusion = "46"
+datafusion = "47"
 dirs = "6"
 glob = "0.3.2"
 lru = "0.14"
 metrics = {version = "0.24", features = [] }
-object_store = { version = "0.11.2", features = ["aws"] }
+object_store = { version = "0.12.1", features = ["aws"] }
 parquet = { version = "55", features = ["arrow"] }
 prost = "0.13"
 rustyline = "15"
@@ -40,5 +40,5 @@ warp = "0.3"
 url = "2"
 futures = "0.3"
 bytes = "1"
-ocra = { git = "https://github.com/lancedb/ocra.git" }
+# ocra = { git = "https://github.com/lancedb/ocra.git" } # Temporarily disabled - requires object_store 0.11.2
 metrics-exporter-prometheus = "0.17"

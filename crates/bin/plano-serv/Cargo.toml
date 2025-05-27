@@ -24,5 +24,5 @@ url = { workspace = true }
 urlencoding = { workspace = true }
 warp = { workspace = true }
 futures = { workspace = true }
-ocra = { workspace = true }
+# ocra = { workspace = true } # Temporarily disabled - requires object_store 0.11.2
 metrics-exporter-prometheus = { workspace = true }

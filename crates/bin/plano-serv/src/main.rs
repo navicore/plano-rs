@@ -1,4 +1,4 @@
-use cached_stats::AtomicIntCacheStats;
+// use cached_stats::AtomicIntCacheStats;
 ///
 /// A `DataFusion`-based query server that serves SQL queries and table metadata
 ///
@@ -7,7 +7,7 @@ use datafusion::{common::HashSet, prelude::*};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use metrics_object_store::MetricsObjectStore;
 use object_store::parse_url;
-use ocra::{memory::InMemoryCache, ReadThroughCache};
+// use ocra::{memory::InMemoryCache, ReadThroughCache};
 use routes::configure_routes;
 use std::{net::SocketAddr, sync::Arc};
 use tables::{register_tables, TableSpec};
@@ -16,7 +16,7 @@ use tracing::info;
 use url::Url;
 use warp::Filter;
 
-mod cached_stats;
+// mod cached_stats; // Temporarily disabled - requires ocra
 mod metrics_object_store;
 mod routes;
 mod tables;
@@ -97,17 +97,18 @@ async fn main() -> anyhow::Result<()> {
         // wrap in caching + metrics
         let base_store = Arc::new(MetricsObjectStore::new(cache));
 
-        let stats = AtomicIntCacheStats::new(); // e.g. 500 MB max
-        let cache_size = 500 * 1024 * 1024;
-        let cache_backend = Arc::new(
-            InMemoryCache::builder(cache_size)
-                //.max_capacity_bytes(stats.max_capacity())
-                .build(),
-        );
-        let cached_store =
-            ReadThroughCache::new_with_stats(base_store, cache_backend, Arc::new(stats));
-        ctx.register_object_store(&url, Arc::new(cached_store));
-    }
+//         let stats = AtomicIntCacheStats::new(); // e.g. 500 MB max
+//         let cache_size = 500 * 1024 * 1024;
+//         let cache_backend = Arc::new(
+//             InMemoryCache::builder(cache_size)
+//                 //.max_capacity_bytes(stats.max_capacity())
+//                 .build(),
+//         );
+//         let cached_store =
+//             ReadThroughCache::new_with_stats(base_store, cache_backend, Arc::new(stats));
+//         ctx.register_object_store(&url, Arc::new(cached_store));
+        // Temporarily disabled ocra caching due to object_store version conflict
+        ctx.register_object_store(&url, base_store);    }
 
     // Register tables based on the provided table specifications.
     //
