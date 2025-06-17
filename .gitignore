@@ -1,6 +1,7 @@
 # Rust build artifacts
 /target
 crates/*/target
+.claude/
 **/*.rs.bk
 /benches/target
 /tools/compile_fail_utils/target
