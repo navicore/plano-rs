@@ -5,9 +5,10 @@
 use bytes::Bytes;
 use futures::stream::BoxStream;
 use metrics::{counter, Counter};
+use object_store::PutMultipartOptions;
 use object_store::{
     path::Path, GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta, ObjectStore,
-    PutMultipartOpts, PutOptions, PutPayload, PutResult, Result,
+    PutOptions, PutPayload, PutResult, Result,
 };
 use std::{fmt::Display, ops::Range, sync::Arc};
 
@@ -44,7 +45,6 @@ impl MetricsObjectStore {
 
 impl ObjectStore for MetricsObjectStore {
     #[doc = " Save the provided `payload` to `location` with the given options"]
-    #[must_use]
     #[allow(
         elided_named_lifetimes,
         clippy::type_complexity,
@@ -75,7 +75,6 @@ impl ObjectStore for MetricsObjectStore {
     #[doc = ""]
     #[doc = " Client should prefer [`ObjectStore::put`] for small payloads, as streaming uploads"]
     #[doc = " typically require multiple separate requests. See [`MultipartUpload`] for more information"]
-    #[must_use]
     #[allow(
         elided_named_lifetimes,
         clippy::type_complexity,
@@ -84,7 +83,7 @@ impl ObjectStore for MetricsObjectStore {
     fn put_multipart_opts<'life0, 'life1, 'async_trait>(
         &'life0 self,
         location: &'life1 Path,
-        opts: PutMultipartOpts,
+        opts: PutMultipartOptions,
     ) -> ::core::pin::Pin<
         Box<
             dyn ::core::future::Future<Output = Result<Box<dyn MultipartUpload>>>
@@ -102,7 +101,6 @@ impl ObjectStore for MetricsObjectStore {
     }
 
     #[doc = " Perform a get request with options"]
-    #[must_use]
     #[allow(
         elided_named_lifetimes,
         clippy::type_complexity,
@@ -129,7 +127,6 @@ impl ObjectStore for MetricsObjectStore {
     }
 
     #[doc = " Delete the object at the specified location."]
-    #[must_use]
     #[allow(
         elided_named_lifetimes,
         clippy::type_complexity,
@@ -167,7 +164,6 @@ impl ObjectStore for MetricsObjectStore {
     #[doc = ""]
     #[doc = " Prefixes are evaluated on a path segment basis, i.e. `foo/bar` is a prefix of `foo/bar/x` but not of"]
     #[doc = " `foo/bar_baz/x`. List is not recursive, i.e. `foo/bar/more/x` will not be included."]
-    #[must_use]
     #[allow(
         elided_named_lifetimes,
         clippy::type_complexity,
@@ -195,7 +191,6 @@ impl ObjectStore for MetricsObjectStore {
     #[doc = " Copy an object from one path to another in the same object store."]
     #[doc = ""]
     #[doc = " If there exists an object at the destination, it will be overwritten."]
-    #[must_use]
     #[allow(
         elided_named_lifetimes,
         clippy::type_complexity,
@@ -225,7 +220,6 @@ impl ObjectStore for MetricsObjectStore {
     #[doc = " Performs an atomic operation if the underlying object storage supports it."]
     #[doc = " If atomic operations are not supported by the underlying object storage (like S3)"]
     #[doc = " it will return an error."]
-    #[must_use]
     #[allow(
         elided_named_lifetimes,
         clippy::type_complexity,
@@ -253,7 +247,6 @@ impl ObjectStore for MetricsObjectStore {
     #[doc = " in the given byte range."]
     #[doc = ""]
     #[doc = " See [`GetRange::Bounded`] for more details on how `range` gets interpreted"]
-    #[must_use]
     #[allow(
         elided_named_lifetimes,
         clippy::async_yields_async,
