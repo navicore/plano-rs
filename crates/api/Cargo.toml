@@ -5,11 +5,12 @@ edition = "2024"
 
 [dependencies]
 tonic = { workspace = true }
+tonic-prost = "0.14"
 prost = { workspace = true }
 tokio = { workspace = true }
 
 [build-dependencies]
-tonic-build = "0.14"
+tonic-prost-build = "0.14"
 
 [package.metadata.build]
 proto_root = "../../proto"
