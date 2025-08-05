@@ -23,7 +23,7 @@ glob = "0.3.2"
 lru = "0.16"
 metrics = {version = "0.24", features = [] }
 object_store = { version = "0.12.1", features = ["aws"] }
-parquet = { version = "55", features = ["arrow"] }
+parquet = { version = "56", features = ["arrow"] }
 prost = "0.14"
 rustyline = "17"
 serde = { version = "1", features = ["derive"] }
