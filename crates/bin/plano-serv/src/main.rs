@@ -71,7 +71,9 @@ async fn main() -> anyhow::Result<()> {
         .expect("failed to install Prometheus recorder");
 
     // 2) Expose it at /metrics on port 9898
-    let metrics_route = warp::path("metrics").map(move || recorder_handle.render());
+    let metrics_route = warp::path("metrics")
+        .map(move || recorder_handle.render())
+        .boxed();
     let addr: SocketAddr = ([0, 0, 0, 0], 9898).into();
     spawn(async move {
         warp::serve(metrics_route).run(addr).await;
