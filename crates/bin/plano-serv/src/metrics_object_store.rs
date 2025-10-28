@@ -46,7 +46,7 @@ impl MetricsObjectStore {
 impl ObjectStore for MetricsObjectStore {
     #[doc = " Save the provided `payload` to `location` with the given options"]
     #[allow(
-        elided_named_lifetimes,
+        mismatched_lifetime_syntaxes,
         clippy::type_complexity,
         clippy::type_repetition_in_bounds
     )]
@@ -76,7 +76,7 @@ impl ObjectStore for MetricsObjectStore {
     #[doc = " Client should prefer [`ObjectStore::put`] for small payloads, as streaming uploads"]
     #[doc = " typically require multiple separate requests. See [`MultipartUpload`] for more information"]
     #[allow(
-        elided_named_lifetimes,
+        mismatched_lifetime_syntaxes,
         clippy::type_complexity,
         clippy::type_repetition_in_bounds
     )]
@@ -102,7 +102,7 @@ impl ObjectStore for MetricsObjectStore {
 
     #[doc = " Perform a get request with options"]
     #[allow(
-        elided_named_lifetimes,
+        mismatched_lifetime_syntaxes,
         clippy::type_complexity,
         clippy::type_repetition_in_bounds
     )]
@@ -128,7 +128,7 @@ impl ObjectStore for MetricsObjectStore {
 
     #[doc = " Delete the object at the specified location."]
     #[allow(
-        elided_named_lifetimes,
+        mismatched_lifetime_syntaxes,
         clippy::type_complexity,
         clippy::type_repetition_in_bounds
     )]
@@ -165,7 +165,7 @@ impl ObjectStore for MetricsObjectStore {
     #[doc = " Prefixes are evaluated on a path segment basis, i.e. `foo/bar` is a prefix of `foo/bar/x` but not of"]
     #[doc = " `foo/bar_baz/x`. List is not recursive, i.e. `foo/bar/more/x` will not be included."]
     #[allow(
-        elided_named_lifetimes,
+        mismatched_lifetime_syntaxes,
         clippy::type_complexity,
         clippy::type_repetition_in_bounds
     )]
@@ -192,7 +192,7 @@ impl ObjectStore for MetricsObjectStore {
     #[doc = ""]
     #[doc = " If there exists an object at the destination, it will be overwritten."]
     #[allow(
-        elided_named_lifetimes,
+        mismatched_lifetime_syntaxes,
         clippy::type_complexity,
         clippy::type_repetition_in_bounds
     )]
@@ -221,7 +221,7 @@ impl ObjectStore for MetricsObjectStore {
     #[doc = " If atomic operations are not supported by the underlying object storage (like S3)"]
     #[doc = " it will return an error."]
     #[allow(
-        elided_named_lifetimes,
+        mismatched_lifetime_syntaxes,
         clippy::type_complexity,
         clippy::type_repetition_in_bounds
     )]
@@ -248,7 +248,7 @@ impl ObjectStore for MetricsObjectStore {
     #[doc = ""]
     #[doc = " See [`GetRange::Bounded`] for more details on how `range` gets interpreted"]
     #[allow(
-        elided_named_lifetimes,
+        mismatched_lifetime_syntaxes,
         clippy::async_yields_async,
         clippy::diverging_sub_expression,
         clippy::let_unit_value,

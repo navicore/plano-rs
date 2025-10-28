@@ -74,7 +74,7 @@ fn handle_output(args: &Args, schema_ref: &Arc<Schema>, batch: &RecordBatch) -> 
         write_partitioned_files(args, schema_ref, batch)?;
     }
     if args.print {
-        print_batches(&[batch.clone()])?;
+        print_batches(std::slice::from_ref(batch))?;
     }
     Ok(())
 }
