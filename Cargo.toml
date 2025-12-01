@@ -41,4 +41,4 @@ url = "2"
 futures = "0.3"
 bytes = "1"
 # ocra = { git = "https://github.com/lancedb/ocra.git" } # Temporarily disabled - requires object_store 0.11.2
-metrics-exporter-prometheus = "0.17"
+metrics-exporter-prometheus = "0.18"
