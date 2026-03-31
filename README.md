@@ -98,11 +98,11 @@ cd <this repo>
 
 cargo build --release --workspace
 #see target/release/
-``
+```
 
 Run postgres
 
-```
+```bash
 podman run --name plano-postgres \
   -e POSTGRES_USER=plano \
   -e POSTGRES_PASSWORD=plano \
