@@ -90,12 +90,15 @@ setup dev env and install via:
 
 on mac:
 
-``
+``bash
 brew install protobuf duckdb postgres
+
 git clone <this repo>
+
 cd <this repo>
+
 cargo build --release --workspace
-see target/release/
+#see target/release/
 ``
 
 Run postgres
