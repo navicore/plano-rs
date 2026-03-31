@@ -89,6 +89,7 @@ Status:
 setup dev env and install via:
 
 on mac:
+
 ``
 brew install protobuf duckdb postgres
 git clone <this repo>
