@@ -1,12 +1,12 @@
+use crate::Arc;
 ///
 /// This module provides `http` route implementations for the `Plano query server`
 ///
 use crate::routes::query_route::handle_query_bytes;
 use crate::routes::table_route::handle_tables;
-use crate::Arc;
 use datafusion::prelude::SessionContext;
-pub use query_route::initialize_cache;
 use query_route::QueryCache;
+pub use query_route::initialize_cache;
 use std::fmt::Display;
 use warp::Filter;
 

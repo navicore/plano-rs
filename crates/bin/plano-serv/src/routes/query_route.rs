@@ -6,7 +6,7 @@ use bytes::Bytes;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::prelude::*;
 use lru::LruCache;
-use plano_core::format::{format_batches, OutputFormat};
+use plano_core::format::{OutputFormat, format_batches};
 use std::collections::HashMap;
 use std::num::NonZero;
 use std::sync::Arc;
@@ -152,12 +152,14 @@ pub async fn handle_query_bytes(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
+#[allow(clippy::items_after_statements)]
 mod tests {
     use super::*;
 
     use std::sync::Arc;
 
-    pub async fn setup_session_context() -> Arc<SessionContext> {
+    pub fn setup_session_context() -> Arc<SessionContext> {
         Arc::new(SessionContext::new())
     }
     use lru::LruCache;
@@ -180,7 +182,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_query_cache_hit() {
-        let ctx = setup_session_context().await;
+        let ctx = setup_session_context();
         let cache = setup_query_cache(10);
         let headers = HeaderMap::new();
         // Simulate a cache hit
@@ -200,7 +202,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_query_missing_sql() {
-        let ctx = setup_session_context().await;
+        let ctx = setup_session_context();
         let cache = setup_query_cache(10);
         let headers = HeaderMap::new();
 
@@ -238,6 +240,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::match_wild_err_arm)]
     fn test_extract_query_success() {
         let mut form = HashMap::new();
         form.insert("sql".to_string(), "SELECT * FROM test_table".to_string());

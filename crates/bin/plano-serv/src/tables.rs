@@ -131,6 +131,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_parse_valid_spec() {
         let spec = TableSpec::parse("events=/data/parquet/events:year,month,day").unwrap();
         assert_eq!(spec.name, "events");
@@ -139,6 +140,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_parse_no_partitions() {
         let spec = TableSpec::parse("users=s3://bucket/users").unwrap();
         assert_eq!(spec.name, "users");
@@ -147,13 +149,11 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_parse_error_message() {
         let result = TableSpec::parse("invalid_spec");
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Invalid table-spec `invalid_spec`"
-        );
+        assert_eq!(result.unwrap_err(), "Invalid table-spec `invalid_spec`");
     }
 
     #[test]
@@ -162,12 +162,14 @@ mod tests {
         assert!(result.is_err());
     }
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_parse_single_partition() {
         let spec = TableSpec::parse("data=/path/to/data:year").unwrap();
         assert_eq!(spec.partitions, vec!["year"]);
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_parse_multiple_partitions() {
         let spec = TableSpec::parse("data=/path/to/data:year,month,day").unwrap();
         assert_eq!(spec.partitions, vec!["year", "month", "day"]);
@@ -185,6 +187,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_parse_complex_uri() {
         let spec = TableSpec::parse("data=s3://bucket-name/folder:year,month").unwrap();
         assert_eq!(spec.name, "data");

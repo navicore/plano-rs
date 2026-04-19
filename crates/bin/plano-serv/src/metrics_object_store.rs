@@ -3,11 +3,11 @@
 /// elsewhere
 ///
 use futures::stream::BoxStream;
-use metrics::{counter, Counter};
+use metrics::{Counter, counter};
 use object_store::PutMultipartOptions;
 use object_store::{
-    path::Path, CopyOptions, GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta,
-    ObjectStore, PutOptions, PutPayload, PutResult, Result,
+    CopyOptions, GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta, ObjectStore,
+    PutOptions, PutPayload, PutResult, Result, path::Path,
 };
 use std::pin::Pin;
 use std::{fmt::Display, sync::Arc};
@@ -47,9 +47,7 @@ impl ObjectStore for MetricsObjectStore {
         location: &'life1 Path,
         payload: PutPayload,
         opts: PutOptions,
-    ) -> Pin<
-        Box<dyn core::future::Future<Output = Result<PutResult>> + Send + 'async_trait>,
-    >
+    ) -> Pin<Box<dyn core::future::Future<Output = Result<PutResult>> + Send + 'async_trait>>
     where
         'life0: 'async_trait,
         'life1: 'async_trait,
@@ -83,9 +81,7 @@ impl ObjectStore for MetricsObjectStore {
         &'life0 self,
         location: &'life1 Path,
         options: GetOptions,
-    ) -> Pin<
-        Box<dyn core::future::Future<Output = Result<GetResult>> + Send + 'async_trait>,
-    >
+    ) -> Pin<Box<dyn core::future::Future<Output = Result<GetResult>> + Send + 'async_trait>>
     where
         'life0: 'async_trait,
         'life1: 'async_trait,
@@ -111,9 +107,7 @@ impl ObjectStore for MetricsObjectStore {
     fn list_with_delimiter<'life0, 'life1, 'async_trait>(
         &'life0 self,
         prefix: Option<&'life1 Path>,
-    ) -> Pin<
-        Box<dyn core::future::Future<Output = Result<ListResult>> + Send + 'async_trait>,
-    >
+    ) -> Pin<Box<dyn core::future::Future<Output = Result<ListResult>> + Send + 'async_trait>>
     where
         'life0: 'async_trait,
         'life1: 'async_trait,
@@ -128,9 +122,7 @@ impl ObjectStore for MetricsObjectStore {
         from: &'life1 Path,
         to: &'life2 Path,
         opts: CopyOptions,
-    ) -> Pin<
-        Box<dyn core::future::Future<Output = Result<()>> + Send + 'async_trait>,
-    >
+    ) -> Pin<Box<dyn core::future::Future<Output = Result<()>> + Send + 'async_trait>>
     where
         'life0: 'async_trait,
         'life1: 'async_trait,

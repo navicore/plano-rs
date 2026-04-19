@@ -7,7 +7,6 @@ crates/*/target
 /tools/compile_fail_utils/target
 
 # Cargo
-Cargo.lock
 .cargo/config
 .cargo/config.toml
 

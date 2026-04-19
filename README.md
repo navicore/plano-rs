@@ -1,4 +1,4 @@
-[![Dependabot Updates](https://github.com/navicore/plano-rs/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/navicore/plano-rs/actions/workflows/dependabot/dependabot-updates) [![rust-clippy analyze](https://github.com/navicore/plano-rs/actions/workflows/rust-clippy.yml/badge.svg)](https://github.com/navicore/plano-rs/actions/workflows/rust-clippy.yml) [![Publish-Crate](https://github.com/navicore/plano-rs/actions/workflows/publish-crates.yml/badge.svg)](https://github.com/navicore/plano-rs/actions/workflows/publish-crates.yml)
+[![Dependabot Updates](https://github.com/navicore/plano-rs/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/navicore/plano-rs/actions/workflows/dependabot/dependabot-updates) [![CI (Linux)](https://github.com/navicore/plano-rs/actions/workflows/ci-linux.yml/badge.svg)](https://github.com/navicore/plano-rs/actions/workflows/ci-linux.yml) [![CI (macOS)](https://github.com/navicore/plano-rs/actions/workflows/ci-macos.yml/badge.svg)](https://github.com/navicore/plano-rs/actions/workflows/ci-macos.yml) [![Publish-Crate](https://github.com/navicore/plano-rs/actions/workflows/publish-crates.yml/badge.svg)](https://github.com/navicore/plano-rs/actions/workflows/publish-crates.yml)
 
 # plano-rs
 
@@ -91,7 +91,7 @@ setup dev env and install via:
 on mac:
 
 ```bash
-brew install protobuf duckdb postgres
+brew install protobuf duckdb postgres just
 
 git clone <this repo>
 cd <this repo>
@@ -99,6 +99,26 @@ cd <this repo>
 cargo build --release --workspace
 #see target/release/
 ```
+
+## CI
+
+The `justfile` is the single source of truth for build / test / lint. Both local
+dev and GitHub Actions invoke the same recipes. Before pushing:
+
+```bash
+just ci
+```
+
+That runs, in order:
+
+- `fmt-check` — `cargo fmt --all -- --check`
+- `lint` — `cargo clippy --locked --workspace --all-targets -- -D warnings` (warnings are errors)
+- `test` — `cargo test --locked --workspace --all-targets`
+- `build` — `cargo build --locked --release`
+
+If `just ci` passes locally, GitHub Actions will pass. The toolchain is pinned
+in `rust-toolchain.toml` and mirrored in each workflow's `toolchain:` input —
+both must agree.
 
 Run postgres
 

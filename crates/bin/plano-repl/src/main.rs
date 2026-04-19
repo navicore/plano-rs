@@ -2,12 +2,12 @@
 use clap::Parser;
 use datafusion::prelude::*;
 use glob::glob;
-use plano_core::format::{format_batches, OutputFormat};
+use plano_core::format::{OutputFormat, format_batches};
+use rustyline::Config;
+use rustyline::Editor as LineEditor;
 use rustyline::config::Configurer;
 use rustyline::error::ReadlineError;
 use rustyline::history::FileHistory;
-use rustyline::Config;
-use rustyline::Editor as LineEditor;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tracing::error;

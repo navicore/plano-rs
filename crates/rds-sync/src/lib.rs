@@ -1,5 +1,5 @@
 /// RDS Sync Library
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use arrow::{
     array::{ArrayRef, BooleanBuilder, PrimitiveBuilder, RecordBatch, StringBuilder},
     datatypes::{
@@ -7,7 +7,7 @@ use arrow::{
         TimestampMicrosecondType,
     },
 };
-use sqlx::{types::chrono, PgPool, Row};
+use sqlx::{PgPool, Row, types::chrono};
 use std::sync::Arc;
 
 /// # Errors
@@ -39,7 +39,7 @@ pub async fn infer_arrow_schema(table: &str, pool: &PgPool) -> Result<Arc<Schema
             "timestamp without time zone" => DataType::Timestamp(TimeUnit::Microsecond, None),
             "date" => DataType::Date32,
             "numeric" | "decimal" | "double precision" => DataType::Float64, // lossy fallback
-            other => bail!("Unsupported SQL type: {}", other),
+            other => bail!("Unsupported SQL type: {other}"),
         };
 
         fields.push(Field::new(&name, arrow_type, nullable));
@@ -115,7 +115,7 @@ pub async fn sync_table(table: &str, schema: &Schema, pool: &PgPool) -> Result<R
                 }
                 Arc::new(builder.finish())
             }
-            other => bail!("Unsupported data type for '{}': {:?}", name, other),
+            other => bail!("Unsupported data type for '{name}': {other:?}"),
         };
 
         columns.push(array);

@@ -10,7 +10,7 @@ use object_store::parse_url;
 // use ocra::{memory::InMemoryCache, ReadThroughCache};
 use routes::configure_routes;
 use std::{net::SocketAddr, sync::Arc};
-use tables::{register_tables, TableSpec};
+use tables::{TableSpec, register_tables};
 use tokio::spawn;
 use tracing::info;
 use url::Url;
@@ -40,10 +40,10 @@ struct Args {
 async fn start_server(
     bind: String,
     routes: impl warp::Filter<Extract = impl warp::Reply, Error = warp::Rejection>
-        + Clone
-        + std::marker::Sync
-        + std::marker::Send
-        + 'static,
+    + Clone
+    + std::marker::Sync
+    + std::marker::Send
+    + 'static,
 ) -> anyhow::Result<()> {
     info!("Serving on http://{}", bind);
     let addr: std::net::SocketAddr = bind.parse()?;
@@ -99,18 +99,19 @@ async fn main() -> anyhow::Result<()> {
         // wrap in caching + metrics
         let base_store = Arc::new(MetricsObjectStore::new(cache));
 
-//         let stats = AtomicIntCacheStats::new(); // e.g. 500 MB max
-//         let cache_size = 500 * 1024 * 1024;
-//         let cache_backend = Arc::new(
-//             InMemoryCache::builder(cache_size)
-//                 //.max_capacity_bytes(stats.max_capacity())
-//                 .build(),
-//         );
-//         let cached_store =
-//             ReadThroughCache::new_with_stats(base_store, cache_backend, Arc::new(stats));
-//         ctx.register_object_store(&url, Arc::new(cached_store));
+        //         let stats = AtomicIntCacheStats::new(); // e.g. 500 MB max
+        //         let cache_size = 500 * 1024 * 1024;
+        //         let cache_backend = Arc::new(
+        //             InMemoryCache::builder(cache_size)
+        //                 //.max_capacity_bytes(stats.max_capacity())
+        //                 .build(),
+        //         );
+        //         let cached_store =
+        //             ReadThroughCache::new_with_stats(base_store, cache_backend, Arc::new(stats));
+        //         ctx.register_object_store(&url, Arc::new(cached_store));
         // Temporarily disabled ocra caching due to object_store version conflict
-        ctx.register_object_store(&url, base_store);    }
+        ctx.register_object_store(&url, base_store);
+    }
 
     // Register tables based on the provided table specifications.
     //

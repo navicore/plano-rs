@@ -5,7 +5,7 @@ use datafusion::arrow::array::{Int64Array, RecordBatch, StringArray};
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
 use datafusion::catalog::SchemaProvider;
 use datafusion::prelude::*;
-use plano_core::format::{format_batches, OutputFormat};
+use plano_core::format::{OutputFormat, format_batches};
 use std::sync::Arc;
 use warp::http::HeaderMap;
 
@@ -35,7 +35,7 @@ async fn get_table_data(
             .downcast_ref::<Int64Array>()
             .ok_or_else(warp::reject::not_found)?;
 
-        table_names.push(table_name.to_string());
+        table_names.push(table_name.clone());
         row_counts.push(count_array.value(0));
     }
 

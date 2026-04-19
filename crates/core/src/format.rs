@@ -45,6 +45,7 @@ pub fn format_batches(batches: &[RecordBatch], format: OutputFormat) -> Result<S
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use datafusion::{
