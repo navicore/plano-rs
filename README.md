@@ -1,3 +1,8 @@
+<!-- ghmig:moved -->
+> **This repository has moved to [https://git.navicore.tech/navicore/plano-rs](https://git.navicore.tech/navicore/plano-rs).**
+>
+> The GitHub copy is archived and no longer maintained.
+
 [![Dependabot Updates](https://github.com/navicore/plano-rs/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/navicore/plano-rs/actions/workflows/dependabot/dependabot-updates) [![CI (Linux)](https://github.com/navicore/plano-rs/actions/workflows/ci-linux.yml/badge.svg)](https://github.com/navicore/plano-rs/actions/workflows/ci-linux.yml) [![CI (macOS)](https://github.com/navicore/plano-rs/actions/workflows/ci-macos.yml/badge.svg)](https://github.com/navicore/plano-rs/actions/workflows/ci-macos.yml) [![Publish-Crate](https://github.com/navicore/plano-rs/actions/workflows/publish-crates.yml/badge.svg)](https://github.com/navicore/plano-rs/actions/workflows/publish-crates.yml)
 
 # plano-rs
